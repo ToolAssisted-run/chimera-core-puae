@@ -1,0 +1,19 @@
+diff --git a/sources/src/x86.c b/sources/src/x86.c
+index 461660df..5a2c3d90 100644
+--- a/sources/src/x86.c
++++ b/sources/src/x86.c
+@@ -4340,6 +4340,14 @@ bool x86_rt1000_init(struct autoconfig_info *aci) { return false; }
+ void x86_rt1000_add_unit(int ch, struct uaedev_config_info *ci, struct romconfig *rc) {}
+ void x86_doirq(uint8_t irqnum) {}
+ void x86_xt_ide_bios(struct zfile *z, struct romconfig *rc) {}
++#ifdef CHIMERA_CORE
++/* Chimera: this stub returned nothing, so whatever was left in the return
++ * register said whether a PC mouse is fitted. mouseupdate() then split the
++ * mouse's movement one way or another, depending on how the build was
++ * compiled: the native build and the sandbox were a count apart. */
++bool x86_mouse(int port, int x, int y, int z, int b) { return false; }
++#else
+ bool x86_mouse(int port, int x, int y, int z, int b) {}
++#endif
+ 
+ #endif

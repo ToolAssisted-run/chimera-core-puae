@@ -15,6 +15,9 @@ series='
 0002-chimera-a-file-with-no-folder|libretro/libretro-glue.c
 0003-chimera-disks-are-kept-in-memory|sources/src/disk.c
 0004-chimera-reads-of-the-controls-are-counted|sources/src/inputdevice.c sources/src/cia.c
+0005-chimera-a-write-of-vposw-does-not-stay|sources/src/custom.c
+0006-chimera-config-names-are-set|sources/src/misc.c
+0007-chimera-the-pc-mouse-stub-returns-false|sources/src/x86.c
 '
 
 rm -f "$root"/patches/*.patch

@@ -209,25 +209,51 @@ Starting Clock ignored and no disk exported, seven tests failed:
   filled with zeros and one with a pattern part ways once the mouse moves,
   so PUAE reads at least one local before writing it. Both builds now fill
   locals with zeros (`-ftrivial-auto-var-init=zero`).
-- **The sound rate on AROS.** After AROS starts, PUAE computes its sound
-  rate from a frame of 569 lines while the frames are 313, and hands out
-  486 samples a frame instead of 882. See "Open problems".
+- **The sound rate on AROS.** After AROS starts, PUAE computed its sound
+  rate from a frame of 569 lines while the frames are 313, and handed out
+  486 samples a frame instead of 882. See "The two problems, fixed".
 
-## Open problems (2026-10-14)
+## The two problems, fixed (2026-10-14)
 
-- **The mouse under the Amiga's own system.** With Ninja Mission on
-  Kickstart 1.3, a mouse moved for some frames makes the counter the game
-  reads differ by one between the native build and the sandbox, from about
-  three frames after the movement starts. Each is the same run after run,
-  and the sandbox's savestates are exact; a test program that reads the
-  mouse itself, with the system off, agrees on both Kickstarts. The native
-  build gives another run again when built without optimisation, and the
-  difference moved or went away when code was added to the input code, so
-  it is code-generation dependent. Ruled out: the clock, the compiler's
-  code flags, the contents of the heap, overlapping copies, mismatched
-  declarations (one found and fixed, not this). The game tests do not move
-  the mouse until this is found.
-- **The sound rate on AROS** (above): the sound of a frame is 486 samples,
-  not 882, once AROS has started; with Kickstart 1.3 it was seen once while
-  Ninja Mission loaded. Native and sandbox agree, so it is PUAE's own
-  arithmetic (`compute_vsynctime`, `maxvpos_nom`).
+**The sound rate after a write of VPOSW.** When a program writes VPOSW
+(the beam position), UAE measures the frame it made and takes its length
+as the machine's: `maxvpos_nom`, from which it computes how many samples
+of sound a frame has. AROS writes VPOSW once as it starts, making one
+frame of 569 lines; UAE took 569 for good, because it looks again only
+while VPOSW keeps being written, and handed out 486 samples a frame
+instead of 882 from then on. Patch 0005: when the frames are back to the
+machine's own length and VPOSW is no longer written, the rate is the
+machine's own again. The one long frame keeps its 1,600 samples, as it
+should. Ninja Mission's single short frame while loading was the same
+thing. Test: `amiga:sound-rate` (frames 420 to 900 on AROS, each 882);
+with the patch switched off it failed (489 frames not 882).
+
+**The mouse, native against sandbox.** With the Amiga's own system
+reading the mouse, a moved mouse left the native build and the sandbox a
+count apart. The cause was in PUAE: with the x86 bridgeboard compiled out,
+its stub `x86_mouse()` returned nothing (`bool x86_mouse(...) {}`). At
+each frame's end `mouseupdate()` asks it whether a PC mouse is fitted; the
+answer was whatever the return register held, which differs with how the
+code was compiled, and it decides whether the frame's movement is handed
+out at once or spread over the lines. Found by logging, in memory, the
+mouse code's figures in a build at -O0 and one at -O2: they parted at the
+first vertical blank after the mouse moved, where one build split the
+movement with a share of 0 and the other with 1000. Patch 0007 returns
+false. `-Wreturn-type` over every file PUAE compiles finds no other
+function like it.
+
+On the way: under libretro, `target_cfgfile_load()` used two name buffers
+it never filled (`fname`, `cname`; the code that fills them is compiled
+out), and copied one into `config_filename`; a build that fills locals
+with a pattern stopped there on glibc's buffer check. Patch 0006 empties
+them.
+
+Measured: five runs with the mouse moved (Ninja Mission twice, Budokan
+after a disk change, an A1200, the test program on AROS) give the same
+digests in the native build at -O2 and at -O0, with locals filled with
+zeros and with a pattern, with the sandbox's code flags, and in the
+sandbox. `game:sandbox` moves the mouse again; with patch 0007 switched
+off it failed.
+
+Counts: the test script 27 passed, 0 failed, 0 skipped; the window test 4
+passed.

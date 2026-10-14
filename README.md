@@ -11,13 +11,9 @@ goes in Chimera's `Cores` folder.
 New, and not published yet.
 
 - Games on floppy disks run, and the sandboxed core gives the same results
-  as a plain native build: picture, sound, joystick, keyboard, the mouse's
-  buttons, lag frames, savestates and disk changes. Tried: Ninja Mission
+  as a plain native build: picture, sound, joystick, keyboard, the mouse,
+  lag frames, savestates and disk changes. Tried: Ninja Mission
   (on an A500 and an A1200), Budokan (two disks) and Prince of Persia.
-- When the Amiga's own system reads the mouse, a moved mouse leaves the
-  native build and the sandbox one count apart (each is the same run after
-  run, and savestates are exact): see "Open problems" in
-  [docs/PLAN.md](docs/PLAN.md).
 - On Windows, Chimera's headless runner plays a project of a game and of
   the core's test program to the same memory and picture as on Linux.
   Chimera's window was tried on Linux only.

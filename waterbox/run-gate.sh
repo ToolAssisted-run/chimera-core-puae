@@ -199,6 +199,14 @@ check "amiga:sandbox" "native and sandbox print the same $(wc -l < "$work/all.st
 check "amiga:controls-change-the-run" "the run with the controls used differs from the idle one, and moving the mouse changes it again" \
 	sh -c "! cmp -s '$work/keys-box.stream' '$work/pr-idle.stream' && ! cmp -s '$work/all-box.stream' '$work/keys-box.stream'"
 
+# the sound: 44.1 kHz at 50 frames a second is 882 pairs a frame. AROS
+# writes VPOSW once as it starts (one frame of 569 lines, about frame 413,
+# with that much more sound); from then on every frame has 882 again
+# (patch 0005; before it, 486 for good)
+nat snd pr --frames 900 --report 1
+check "amiga:sound-rate" "after AROS has started, each of frames 420 to 900 hands out 882 pairs of samples ($(stream "$work/snd.out" | awk '$2 >= 420 && $9 != 882' | wc -l) did not)" \
+	sh -c "[ \$(grep '^frame' '$work/snd.out' | awk '\$2 >= 420' | wc -l) = 481 ] && [ \$(grep '^frame' '$work/snd.out' | awk '\$2 >= 420 && \$9 != 882' | wc -l) = 0 ]"
+
 # lag: the program reads its controls every frame, its twin never does;
 # both count lag frames while AROS boots
 nat q qu --frames 900 --report 100
@@ -271,9 +279,8 @@ fi
 adf="$(ls "$game"/*.adf 2> /dev/null | head -1)"
 if [ -n "$adf" ] && [ -f "$kicks/amiga-os-130.rom" ]; then
 	folder gm '{}' "$adf"; ln -sf "$kicks/amiga-os-130.rom" "$work/gm/amiga-os-130.rom"
-	# (the mouse is not moved here: when the Amiga's own system reads it,
-	# native and sandbox part by a count - docs/PLAN.md, "Open problems")
-	gmrun="--frames 2600 --report 50 --press $(index gm "P1 Fire"):1600:30 --press $(index gm "Mouse Left"):1700:10 --press $(index gm "Key Space"):1800:5"
+	# the mouse moved while the Amiga's own system reads it (patch 0007)
+	gmrun="--frames 2600 --report 50 --press $(index gm "P1 Fire"):1600:30 --press $(index gm "Mouse Left"):1700:10 --press $(index gm "Key Space"):1800:5 --axis 0:4:1900:20 --axis 1:-3:1950:40"
 	nat gm-idle gm --frames 2600 --report 50
 	nat gm gm $gmrun
 	box gm-box gm $gmrun
@@ -283,7 +290,7 @@ if [ -n "$adf" ] && [ -f "$kicks/amiga-os-130.rom" ]; then
 	pictures="$(awk '{print $7}' "$work/gm.stream" | sort -u | wc -l)"
 	check "game:runs" "$(basename "$adf") boots on Kickstart 1.3 (an A500): $pictures different pictures in 52 reports, and the controls change the run" \
 		sh -c "[ $pictures -gt 3 ] && ! cmp -s '$work/gm.stream' '$work/gm-idle.stream'"
-	check "game:sandbox" "native and sandbox print the same $(wc -l < "$work/gm.stream") digests with presses" same "$work/gm.stream" "$work/gm-box.stream"
+	check "game:sandbox" "native and sandbox print the same $(wc -l < "$work/gm.stream") digests with presses and the mouse moved" same "$work/gm.stream" "$work/gm-box.stream"
 	check "game:states" "a state saved and loaded every frame, and a state moved to a new sandbox, change nothing" \
 		sh -c "cmp -s '$work/gm-box.stream' '$work/gm-rerecord.stream' && cmp -s '$work/gm-box.stream' '$work/gm-session.stream'"
 	if [ -f "$kicks/amiga-os-310-a1200.rom" ]; then

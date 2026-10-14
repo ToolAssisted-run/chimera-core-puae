@@ -1,0 +1,20 @@
+diff --git a/sources/src/custom.c b/sources/src/custom.c
+index 06b3f9c6..dbad7faa 100644
+--- a/sources/src/custom.c
++++ b/sources/src/custom.c
+@@ -12578,6 +12578,15 @@ static void vsync_check_vsyncmode(void)
+ 		init_hz_normal();
+ 	} else if (vpos_count > 0 && abs(vpos_count - vpos_count_diff) > 1 && vposw_change && vposw_change < 4) {
+ 		init_hz_vposw();
++#ifdef CHIMERA_CORE
++	/* Chimera: one write of VPOSW (AROS's Kickstart makes one as it starts)
++	 * left the frame length it measured - 569 lines - in place for good,
++	 * and with it the sound rate: 486 samples a frame instead of 882. When
++	 * the frames are back to the machine's own length and VPOSW is no
++	 * longer written, the rate is the machine's own again. */
++	} else if (vpos_count > 0 && !vposw_change && maxvpos_nom != maxvpos && abs(vpos_count - current_maxvpos()) <= 1) {
++		init_hz_normal();
++#endif
+ 	} else if (interlace_changed || changed_chipset_refresh() || lof_changed) {
+ 		compute_framesync();
+ 		display_reset = 2;

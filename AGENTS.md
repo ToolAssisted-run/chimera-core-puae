@@ -9,8 +9,7 @@ declarations Chimera reads (buttons, settings, file types, firmware).
 
 Read [docs/BUILDING.md](docs/BUILDING.md) before building and
 [docs/PLAN.md](docs/PLAN.md) before changing how the core works: it is the
-design log, with what was decided, why, and what was measured, and its
-"Open problems" section.
+design log, with what was decided, why, and what was measured.
 
 ## Layout
 
@@ -89,6 +88,12 @@ purpose once and seen to fail.
   or attached to an issue. Test content stays under `tests/roms-local` and
   `tests/games-local`, and is copied there, never linked from where the
   owner keeps it.
+- **UB in PUAE shows as native against sandbox.** A function that returns
+  nothing, a local read before it is written, a variable declared with
+  another type than it has: each made the two builds part. Build the
+  native runner at -O0 and with `-ftrivial-auto-var-init=pattern`; if the
+  results move, find the cause (docs/PLAN.md has how the last ones were
+  found).
 - **Say what was not tried.** A model that started and never ran a game
   has not been shown to work.
 - **Write in plain language**: commit messages, documents, comments and

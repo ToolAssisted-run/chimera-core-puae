@@ -1,0 +1,17 @@
+diff --git a/sources/src/misc.c b/sources/src/misc.c
+index f2cfcd4b..9b63d072 100644
+--- a/sources/src/misc.c
++++ b/sources/src/misc.c
+@@ -395,6 +395,12 @@ int target_cfgfile_load (struct uae_prefs *p, const TCHAR *filename, int type, i
+ 	int ct, ct2, size;
+ 	char tmp1[MAX_DPATH], tmp2[MAX_DPATH];
+ 	TCHAR fname[MAX_DPATH], cname[MAX_DPATH];
++#ifdef CHIMERA_CORE
++	/* Chimera: under libretro the lines that fill these are left out, and
++	 * both were used unset (cname is copied into config_filename) */
++	fname[0] = 0;
++	cname[0] = 0;
++#endif
+ #ifndef __LIBRETRO__
+ 	error_log(NULL);
+ 	_tcscpy (fname, filename);
