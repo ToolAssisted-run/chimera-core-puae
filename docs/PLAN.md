@@ -257,3 +257,22 @@ off it failed.
 
 Counts: the test script 27 passed, 0 failed, 0 skipped; the window test 4
 passed.
+
+## 2026-10-14: the default bindings name keys Chimera has
+
+**Found.** Chimera hands a key to the bindings under one name only: the
+name DistinctKeyNameOverrides gives it ("Number1", "Enter", "Backtick",
+"KeypadAdd"), or else its DistinctKey name (Input.cs). By default it also
+reads the left and right Shift, Ctrl and Alt as one key each, "Shift",
+"Ctrl" and "Alt" (Config.MergeLAndRModifierKeys). A binding to any other
+name never fires, so those controls shipped unbound.
+
+**Decided.** The bindings use those names; where both keys of a modifier
+were bound, the left one is on the merged key and the right one ships
+unbound. The test `package:key-names` (`tests/check-key-names.py`) reads the
+names from Chimera's source and checks every binding.
+
+Measured: 20 bindings were changed: the digits, Backtick, Enter, the keypad's
++, - and ., Fire on Ctrl and Fire 2 on Alt (were LeftControl and LeftAlt),
+Left Shift on Shift; Right Shift and Right Alt now ship unbound (Alt is
+Fire 2's).

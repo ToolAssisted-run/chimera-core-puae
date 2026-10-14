@@ -148,6 +148,12 @@ m = cfg["machines"]
 ok = len(m) == 1 and m[0]["input"]["buttons"] == buttons and [a["name"] for a in m[0]["input"]["axes"]] == names and len(names) == axes
 sys.exit(0 if ok and len(buttons) == 119 and axes == 2 else 1)
 PY
+if [ -n "$chimera_root" ] && [ -f "$chimera_root/source/gui/Chimera.Input/KeyMouseInput/DistinctKey.cs" ]; then
+	check "package:key-names" "every host key the package's default bindings name is a key Chimera knows: $(python3 "$root/tests/check-key-names.py" "$chimera_root" "$here/default_keybinds.json" 2>&1)" \
+		sh -c "python3 '$root/tests/check-key-names.py' '$chimera_root' '$here/default_keybinds.json' > /dev/null 2>&1"
+else
+	report "package:key-names" SKIP "needs CHIMERA_ROOT, whose source names the keys Chimera knows"
+fi
 
 # AROS starts the boot block at about frame 630; the controls are held from
 # frame 700 to the end, and the program's copy is read at frame 900

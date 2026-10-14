@@ -76,7 +76,9 @@ purpose once and seen to fail.
 - **The controls reach UAE directly**, not through PUAE's libretro gamepad
   mapping (`give_controls` in `cinterface.c`). They are in two places that
   must agree: the tables in `cinterface.c` and the `input` of the machine
-  in `waterbox.config`. The test `package:controls` compares them.
+  in `waterbox.config`. The test `package:controls` compares them;
+  `package:key-names` checks that the default bindings name keys Chimera
+  knows (`tests/check-key-names.py`).
 - **PUAE's options are settings by name**: a setting named like an option
   less `puae_` sets it (`model` is `puae_model`). An option that names no
   default has its first value, as libretro has it.
