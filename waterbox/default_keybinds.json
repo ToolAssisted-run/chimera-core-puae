@@ -1,12 +1,12 @@
 {
   "_comment": [
-    "The joystick in port 2 is on the arrow keys, with Fire on Ctrl and Fire 2",
-    "on Alt. The mouse in port 1 follows the host's mouse: its movement, and its",
+    "The joystick in port 2 is on the arrow keys, with Fire on Left Ctrl and Fire 2",
+    "on Left Alt. The mouse in port 1 follows the host's mouse: its movement, and its",
     "left and right buttons. An Amiga key is on the host's key of the same name",
     "(Help on Insert, the Amiga keys on the Windows keys), except the Amiga's own",
-    "cursor keys, Ctrl and both Alt keys, which the joystick uses and which ship",
-    "unbound. Chimera reads the left and right Shift, Ctrl and Alt as one key each",
-    "by default, so Right Shift ships unbound and Left Shift is on Shift."
+    "cursor keys, Ctrl and Left Alt, which the joystick uses and which ship unbound.",
+    "Chimera reads the left and right Shift, Ctrl and Alt as one key each unless",
+    "told otherwise, so the left keys are bound under both names."
   ],
   "AllTrollers": {
     "Amiga Controls": {
@@ -14,8 +14,8 @@
       "P1 Down": "Down",
       "P1 Left": "Left",
       "P1 Right": "Right",
-      "P1 Fire": "Ctrl",
-      "P1 Fire 2": "Alt",
+      "P1 Fire": "Ctrl, LeftCtrl",
+      "P1 Fire 2": "Alt, LeftAlt",
       "P1 Play": "",
       "P1 Rewind": "",
       "P1 Forward": "",
@@ -89,7 +89,7 @@
       "Key ;": "Semicolon",
       "Key '": "Apostrophe",
       "Key #": "",
-      "Key Left Shift": "Shift",
+      "Key Left Shift": "Shift, LeftShift",
       "Key <>": "",
       "Key Z": "Z",
       "Key X": "X",
@@ -101,12 +101,12 @@
       "Key ,": "Comma",
       "Key .": "Period",
       "Key /": "Slash",
-      "Key Right Shift": "",
+      "Key Right Shift": "RightShift",
       "Key Left Alt": "",
       "Key Left Amiga": "LeftWin",
       "Key Space": "Space",
       "Key Right Amiga": "RightWin",
-      "Key Right Alt": "",
+      "Key Right Alt": "RightAlt",
       "Key Cursor Up": "",
       "Key Cursor Down": "",
       "Key Cursor Left": "",

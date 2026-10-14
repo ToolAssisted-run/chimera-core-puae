@@ -4,8 +4,8 @@ Chimera knows, so that none ships unbound by a misspelling. Chimera's names
 are read from its source: the keyboard's (source/gui/Chimera.Input/
 KeyMouseInput/DistinctKey.cs, with the names DistinctKeyNameOverrides.cs
 gives some of them, and Shift, Ctrl and Alt for both keys of each, as
-Chimera merges them by default) and the mouse's. A gamepad's buttons are
-not checked.
+Chimera merges them by default: a panel that binds LeftShift or RightShift
+must bind Shift too) and the mouse's. A gamepad's buttons are not checked.
 
 usage: check-key-names.py <chimera checkout> <default_keybinds.json>"""
 import json
@@ -32,15 +32,20 @@ renamed_keys = {alias[m]: n for m, n in renamed.items() if m in alias}
 known = {renamed_keys.get(k, m) for m, k in alias.items()}
 # Chimera merges the left and right modifier keys unless told not to
 # (Config.MergeLAndRModifierKeys, true by default; Input.ModifierKeyPreMap):
-# a press of either Shift arrives as "Shift", so a binding to LeftShift
-# never fires on a default setup
+# a press of either Shift arrives as "Shift". LeftShift and RightShift fire
+# only with the merging off, so a panel that binds them must also bind the
+# merged key, or Shift does nothing on a default setup.
 merged = {"LeftShift": "Shift", "RightShift": "Shift", "LeftCtrl": "Ctrl", "RightCtrl": "Ctrl",
           "LeftAlt": "Alt", "RightAlt": "Alt"}
-known = (known - set(merged)) | set(merged.values())
+known |= set(merged.values())
 known |= {"WMouse L", "WMouse R", "WMouse M", "WMouse 1", "WMouse 2", "WMouse X", "WMouse Y", "RMouse X", "RMouse Y"}
 cfg = json.load(open(binds))
 bad = []
-for panel in cfg.get("AllTrollers", {}).values():
+for name, panel in cfg.get("AllTrollers", {}).items():
+    parts = {p.strip() for v in panel.values() for p in v.split(",")}
+    for side, both in merged.items():
+        if side in parts and both not in parts:
+            bad.append(f"{name}: {side} is bound but {both} is not (a default setup sends only {both})")
     for control, value in panel.items():
         for key in filter(None, (v.strip() for v in value.split(","))):
             # a chord is keys joined by +
