@@ -96,7 +96,7 @@ core gives PUAE a disk's file directly and none of that is used.
   CD32's pad (Fire and Fire 2 are then its red and blue buttons); P2 the
   same for a joystick in port 1; Mouse Left, Right and Middle, and the axes
   Mouse X and Mouse Y, how far the mouse moves in a frame (-128 to 127, the
-  mouse's own counts); and the 95 keys of the Amiga's keyboard, under the
+  mouse's own counts); and the 96 keys of the Amiga's keyboard, under the
   names printed on them. A key is told to the machine when it goes down and
   when it comes up.
 - **Lag frames**: a frame in which the machine did not read its controls.
@@ -114,3 +114,42 @@ Persia (Softgold, German) its title. Another copy of Prince of Persia
 (`pop.adf`) stays on a red screen and never reads its controls; it was not
 looked into. Ninja Mission on an A1200 with Kickstart 3.1 boots to the
 disk's own anti-virus boot block.
+
+## The package and the disks (2026-10-14)
+
+- **One system, `AMIGA` ("Commodore Amiga")**, with the machine as a
+  setting, Model: PUAE's presets A500 (the default), A500OG, A500PLUS,
+  A600, A1200OG, A1200, A2000OG, A2000, A4030 and A4040. The CDTV and CD32
+  presets are left out for now: their drives start threads (akiko.c,
+  cdtv.c).
+- **Settings named after PUAE's options** reach them with no code: Model is
+  `puae_model`, Kickstart is `puae_kickstart` ('auto', the Model's own, or
+  'aros', the free replacement PUAE carries), Video Standard is
+  `puae_video_standard` (PAL or NTSC, where PUAE's default would guess from
+  the file's name). Port 1 and Port 2 are the core's own.
+- **Firmware**: the Kickstart ROM of each Model, under the names Amiga
+  Forever gives them (`amiga-os-130.rom` and so on), which PUAE looks for,
+  each known by its SHA-1, required when Kickstart is 'auto' and the Model
+  is one that uses it.
+- **Disks**: a project holds up to 20; the first is in the drive at the
+  start. Previous Disk and Next Disk move a selector over them; Eject Disk
+  takes the disk out for as long as it is held and puts the selected one
+  in when it is let go (as the Saturn's drive in the Mednafen core).
+  Patch 0003 keeps every disk the machine has had in a drive in a table in
+  memory, so a disk taken out and put back still has what was written to
+  it, and Emulator > Export Save Data writes each disk that differs from
+  its file, under its own name.
+- **Key bindings**: the joystick on the arrow keys with Fire on Left Ctrl
+  and Fire 2 on Left Alt; the mouse on the host's mouse (its movement and
+  its left and right buttons); each Amiga key on the host's key of the same
+  name. The Amiga's own cursor keys, Ctrl and Left Alt ship unbound,
+  because the joystick uses those host keys.
+
+Measured: with Budokan's second disk in the drive Kickstart asks for a
+disk; Next Disk and Eject Disk put the first in and its intro starts; with
+no change it keeps asking. Native and sandbox print the same 40 digests
+over that change, also with a state saved and loaded every frame. The
+package passes Chimera's package checks (18 of 18). A project of Ninja
+Mission with a key held at frame 1400 plays in Chimera's headless runner
+(`chimera-run --project`, the Kickstart given with `--firmware`) to the
+Chip RAM the sandbox runner leaves, and another than the idle run's.

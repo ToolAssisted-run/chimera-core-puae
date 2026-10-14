@@ -1,0 +1,18 @@
+{
+ "_comment": "This file lists the kinds of file a project of this core can hold. Chimera's New Project window is built from it. Each kind is called a slot. A project file records its files under the slot ids used here.",
+ "slots": [
+  {
+   "id": "disk",
+   "title": "Disks",
+   "min": 1,
+   "max": 20,
+   "formats": [
+    "adf",
+    "adz",
+    "dms",
+    "fdi"
+   ],
+   "help": "The game's floppy disks: .adf files (or .adz and .dms, which are packed ones, or .fdi). The first is in the drive when the Amiga is switched on; the others wait their turn, for the games that ask for another disk. Your files are never changed: the Amiga writes to copies of them in its memory."
+  }
+ ]
+}

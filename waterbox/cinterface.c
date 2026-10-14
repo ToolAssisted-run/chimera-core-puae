@@ -26,6 +26,7 @@
 #include "options.h"
 #include "memory.h"
 #include "inputdevice.h"
+#include "disk.h"
 
 /* ---- what went wrong, for Chimera to show -------------------------------- */
 static char g_loadError[512];
@@ -86,6 +87,8 @@ enum {
 	kP2Up, kP2Down, kP2Left, kP2Right, kP2Fire, kP2Fire2,
 	/* the mouse in port 1 */
 	kMouseLeft, kMouseRight, kMouseMiddle,
+	/* the drive: a selector over the project's disks, and the disk out */
+	kPreviousDisk, kNextDisk, kEjectDisk,
 	kFirstKey
 };
 static const struct { const char *name; int code; } kKeys[] = {
@@ -116,6 +119,7 @@ static const char *const kPortButtonNames[kFirstKey] = {
 	"P1 Play", "P1 Rewind", "P1 Forward", "P1 Green", "P1 Yellow",
 	"P2 Up", "P2 Down", "P2 Left", "P2 Right", "P2 Fire", "P2 Fire 2",
 	"Mouse Left", "Mouse Right", "Mouse Middle",
+	"Previous Disk", "Next Disk", "Eject Disk",
 };
 static char g_keyNames[KEY_COUNT][24];
 static int g_held[BUTTON_COUNT], g_was[BUTTON_COUNT];
@@ -140,13 +144,19 @@ static int port_setting(const char *name, int otherwise)
 	return otherwise;
 }
 
+/* the project's disks, in order; the first is in the drive at the start */
+#define MAX_DISKS 20
+static char g_disks[MAX_DISKS][256];
+static int g_diskCount, g_selected;
+
 static int button_active(int i)
 {
 	if (i >= kFirstKey) return 1;
 	if (i <= kP1Fire2) return g_port2 == kJoystick || g_port2 == kPad;
 	if (i <= kP1Yellow) return g_port2 == kPad;
 	if (i <= kP2Fire2) return g_port1 == kJoystick;
-	return g_port1 == kMouse;
+	if (i <= kMouseMiddle) return g_port1 == kMouse;
+	return g_diskCount > 1 || i == kEjectDisk;
 }
 
 /* UAE's configuration lines for the ports (patch 0005 adds them last) */
@@ -190,6 +200,17 @@ static void give_controls(void)
 			if (g_held[kMouseLeft + b] != g_was[kMouseLeft + b])
 				setmousebuttonstate(0, b, g_held[kMouseLeft + b]);
 	}
+	/* the drive: Previous and Next move the selector (on the press); Eject
+	 * takes the disk out for as long as it is held, and puts the selected
+	 * one in when it is let go */
+	if (g_held[kPreviousDisk] && !g_was[kPreviousDisk] && g_diskCount > 0)
+		g_selected = (g_selected + g_diskCount - 1) % g_diskCount;
+	if (g_held[kNextDisk] && !g_was[kNextDisk] && g_diskCount > 0)
+		g_selected = (g_selected + 1) % g_diskCount;
+	if (g_held[kEjectDisk] && !g_was[kEjectDisk])
+		disk_eject(0);
+	else if (!g_held[kEjectDisk] && g_was[kEjectDisk] && g_diskCount > 0)
+		disk_insert(0, g_disks[g_selected]);
 	/* a key is told when it goes down and when it comes up, as a keyboard does */
 	for (int k = 0; k < KEY_COUNT; k++)
 		if (g_held[kFirstKey + k] != g_was[kFirstKey + k])
@@ -330,25 +351,29 @@ ECL_EXPORT const char *DescribeDips(void) { return ""; }
 
 ECL_EXPORT int Init(void)
 {
-	static char disk[512];
 	g_loadError[0] = '\0';
-	if (wbx_slot_count("disk") > 0)
-		wbx_slot_name("disk", 0, disk, sizeof disk);
-	if (!disk[0])
+	g_diskCount = wbx_slot_count("disk");
+	if (g_diskCount > MAX_DISKS) g_diskCount = MAX_DISKS;
+	for (int i = 0; i < g_diskCount; i++)
+		wbx_slot_name("disk", i, g_disks[i], sizeof g_disks[i]);
+	if (g_diskCount == 0)
 	{
+		/* a disk opened with no project is mounted under its own name */
 		FILE *f = fopen("rom.name", "rb");
 		if (f)
 		{
-			size_t got = fread(disk, 1, sizeof disk - 1, f);
-			disk[got] = '\0';
+			size_t got = fread(g_disks[0], 1, sizeof g_disks[0] - 1, f);
+			g_disks[0][got] = '\0';
 			fclose(f);
+			g_diskCount = g_disks[0][0] != '\0';
 		}
 	}
-	if (!disk[0])
+	if (g_diskCount == 0)
 	{
 		snprintf(g_loadError, sizeof g_loadError, "no disk was given");
 		return 0;
 	}
+	g_selected = 0;
 
 	g_port1 = port_setting("port1", kMouse);
 	g_port2 = port_setting("port2", kJoystick);
@@ -364,10 +389,10 @@ ECL_EXPORT int Init(void)
 	retro_set_input_state(input_state);
 	retro_init();
 
-	struct retro_game_info info = { disk, NULL, 0, NULL };
+	struct retro_game_info info = { g_disks[0], NULL, 0, NULL };
 	if (!retro_load_game(&info))
 	{
-		snprintf(g_loadError, sizeof g_loadError, "the emulator did not start with %s", disk);
+		snprintf(g_loadError, sizeof g_loadError, "the emulator did not start with %s", g_disks[0]);
 		return 0;
 	}
 	struct retro_system_av_info av;
@@ -436,7 +461,38 @@ ECL_EXPORT const int64_t *GetBusRanges(int32_t bus) { (void)bus; return NULL; }
 ECL_EXPORT const uint8_t *ReadBus(int32_t bus, int64_t addr, int32_t len) { (void)bus; (void)addr; (void)len; return NULL; }
 ECL_EXPORT void PokeBus(int32_t bus, int32_t addr, int32_t value) { (void)bus; (void)addr; (void)value; }
 
-ECL_EXPORT int32_t GetSaveDataFileCount(void) { return 0; }
-ECL_EXPORT const char *GetSaveDataFileName(int32_t i) { (void)i; return ""; }
-ECL_EXPORT int64_t GetSaveDataFileSize(int32_t i) { (void)i; return 0; }
-ECL_EXPORT const uint8_t *GetSaveDataFileBuffer(int32_t i) { (void)i; return NULL; }
+/* Export Save Data: each disk the Amiga has written to, as it is now (the
+ * table patch 0003 keeps in disk.c), under the disk's own name */
+struct chimera_disk { char name[MAX_DPATH]; uae_u8 *data; size_t size; };
+extern struct chimera_disk chimera_disks[];
+extern int chimera_disk_count;
+extern void chimera_disks_sync(void);
+static int g_saveIndex[32], g_saveCount;
+
+static int disk_changed(int i)
+{
+	FILE *f = fopen(chimera_disks[i].name, "rb");
+	if (!f) return 1;
+	int changed = 0;
+	uint8_t buf[4096];
+	size_t at = 0, got;
+	while ((got = fread(buf, 1, sizeof buf, f)) > 0 && !changed)
+	{
+		if (at + got > chimera_disks[i].size || memcmp(buf, chimera_disks[i].data + at, got)) changed = 1;
+		at += got;
+	}
+	fclose(f);
+	return changed || at != chimera_disks[i].size;
+}
+
+ECL_EXPORT int32_t GetSaveDataFileCount(void)
+{
+	chimera_disks_sync();
+	g_saveCount = 0;
+	for (int i = 0; i < chimera_disk_count && g_saveCount < 32; i++)
+		if (disk_changed(i)) g_saveIndex[g_saveCount++] = i;
+	return g_saveCount;
+}
+ECL_EXPORT const char *GetSaveDataFileName(int32_t i) { return i >= 0 && i < g_saveCount ? chimera_disks[g_saveIndex[i]].name : ""; }
+ECL_EXPORT int64_t GetSaveDataFileSize(int32_t i) { return i >= 0 && i < g_saveCount ? (int64_t)chimera_disks[g_saveIndex[i]].size : 0; }
+ECL_EXPORT const uint8_t *GetSaveDataFileBuffer(int32_t i) { return i >= 0 && i < g_saveCount ? chimera_disks[g_saveIndex[i]].data : NULL; }

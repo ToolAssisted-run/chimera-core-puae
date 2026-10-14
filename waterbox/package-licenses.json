@@ -1,0 +1,78 @@
+{
+  "package": "puae",
+  "effectiveTerms": "GPL-2.0",
+  "commercialUse": "allowed under the GPL",
+  "note": "The core is PUAE (libretro-uae, GPL-2.0), the libretro port of UAE based on WinUAE 5.3.1, with this repository's integration (MIT). The program is distributed under the GPL version 2. Compiled in from PUAE's own tree: zlib (zlib licence), the LZMA SDK by Igor Pavlov (public domain), libretro-common (MIT), SoftFloat (its own licence and the GPL), xDMS by Andre Rodrigues de la Rocha (public domain), LHa for UNIX by Yooichi Tagawa and others (its own licence), kjmp2 by Martin J. Fiedler (zlib-style), and two ROMs as data: AROS's replacement Kickstart (AROS Public License 1.1) and the HRTMon debugger by Alain Malek (GPL). The package contains no Kickstart ROM of Commodore's and no game: the user supplies them.",
+  "components": [
+    {
+      "name": "chimera-core-puae (integration)",
+      "license": "MIT, and GPL-2.0 for patches/",
+      "url": "https://github.com/ToolAssisted-run/chimera-core-puae",
+      "commit": "{selfCommit}",
+      "file": "LICENSE",
+      "sourceUrl": "https://github.com/ToolAssisted-run/chimera-core-puae/archive/{commit}.tar.gz"
+    },
+    {
+      "name": "PUAE (libretro-uae)",
+      "license": "GPL-2.0",
+      "url": "https://github.com/libretro/libretro-uae",
+      "commit": "{submodule:extern/libretro-uae}",
+      "file": "extern/libretro-uae/COPYING",
+      "sourceUrl": "https://github.com/libretro/libretro-uae/archive/{commit}.tar.gz"
+    },
+    {
+      "name": "AROS replacement Kickstart ROM (in PUAE, sources/src/aros.rom.c)",
+      "license": "AROS Public License 1.1",
+      "url": "https://aros.sourceforge.io/",
+      "file": "waterbox/licenses/AROS-PUBLIC-LICENSE.txt"
+    },
+    {
+      "name": "zlib (in PUAE)",
+      "license": "Zlib",
+      "url": "https://zlib.net/",
+      "file": "extern/libretro-uae/deps/libz/zlib.h"
+    },
+    {
+      "name": "LZMA SDK (in PUAE)",
+      "license": "public domain",
+      "url": "https://www.7-zip.org/sdk.html",
+      "file": "extern/libretro-uae/deps/7zip/LzmaDec.c"
+    },
+    {
+      "name": "libretro-common (in PUAE)",
+      "license": "MIT",
+      "url": "https://github.com/libretro/libretro-common",
+      "file": "extern/libretro-uae/libretro-common/file/file_path.c"
+    },
+    {
+      "name": "SoftFloat (in PUAE)",
+      "license": "SoftFloat-2a, BSD and GPL-2.0-or-later",
+      "url": "http://www.jhauser.us/arithmetic/SoftFloat.html",
+      "file": "extern/libretro-uae/sources/src/softfloat/softfloat.c"
+    },
+    {
+      "name": "xDMS (in PUAE)",
+      "license": "public domain",
+      "url": "https://github.com/libretro/libretro-uae/tree/master/sources/src/archivers/dms",
+      "file": "extern/libretro-uae/sources/src/archivers/dms/pfile.c"
+    },
+    {
+      "name": "LHa for UNIX (in PUAE)",
+      "license": "LHa licence",
+      "url": "https://github.com/libretro/libretro-uae/tree/master/sources/src/archivers/lha",
+      "file": "extern/libretro-uae/sources/src/archivers/lha/lharc.c"
+    },
+    {
+      "name": "kjmp2 (in PUAE)",
+      "license": "Zlib",
+      "url": "https://keyj.emphy.de/kjmp2/",
+      "file": "extern/libretro-uae/sources/src/archivers/mp2/kjmp2.c"
+    },
+    {
+      "name": "HRTMon ROM (in PUAE, sources/src/hrtmon.rom.c)",
+      "license": "GPL-2.0",
+      "url": "https://github.com/libretro/libretro-uae/blob/master/sources/src/hrtmon.rom.c",
+      "file": "extern/libretro-uae/COPYING"
+    }
+  ]
+}

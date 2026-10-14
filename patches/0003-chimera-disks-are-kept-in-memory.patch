@@ -1,8 +1,55 @@
 diff --git a/sources/src/disk.c b/sources/src/disk.c
-index d5e318e2..09fc277c 100644
+index d5e318e2..36041804 100644
 --- a/sources/src/disk.c
 +++ b/sources/src/disk.c
-@@ -1000,12 +1000,39 @@ int DISK_validate_filename (struct uae_prefs *p, const TCHAR *fname_in, int num,
+@@ -780,6 +780,36 @@ static void drive_settype_id (drive *drv)
+ #endif
+ }
+ 
++#ifdef CHIMERA_CORE
++/* Chimera: every disk the machine has had in a drive, as it last left it */
++#define CHIMERA_MAX_DISKS 32
++struct chimera_disk { TCHAR name[MAX_DPATH]; uae_u8 *data; size_t size; };
++struct chimera_disk chimera_disks[CHIMERA_MAX_DISKS];
++int chimera_disk_count;
++static int chimera_disk_find (const TCHAR *name)
++{
++	for (int i = 0; i < chimera_disk_count; i++)
++		if (!_tcscmp (chimera_disks[i].name, name))
++			return i;
++	return -1;
++}
++/* what the drive's copy of a disk holds goes back to the table */
++static void chimera_disk_keep (struct zfile *z)
++{
++	size_t len = 0;
++	uae_u8 *data = z ? zfile_get_data_pointer (z, &len) : NULL;
++	int idx = z ? chimera_disk_find (zfile_getname (z)) : -1;
++	if (data && idx >= 0 && len == chimera_disks[idx].size)
++		memcpy (chimera_disks[idx].data, data, len);
++}
++/* for the core's export: every drive's disk back into the table first */
++void chimera_disks_sync (void)
++{
++	for (int i = 0; i < MAX_FLOPPY_DRIVES; i++)
++		chimera_disk_keep (floppy[i].diskfile);
++}
++#endif
++
+ static void drive_image_free (drive *drv)
+ {
+ 	switch (drv->filetype)
+@@ -802,6 +832,9 @@ static void drive_image_free (drive *drv)
+ 		break;
+ 	}
+ 	drv->filetype = ADF_NONE;
++#ifdef CHIMERA_CORE
++	chimera_disk_keep (drv->diskfile);
++#endif
+ 	zfile_fclose(drv->diskfile);
+ 	drv->diskfile = NULL;
+ 	zfile_fclose(drv->writediskfile);
+@@ -1000,12 +1033,44 @@ int DISK_validate_filename (struct uae_prefs *p, const TCHAR *fname_in, int num,
  		_tcscpy(outfname, outname);
  
  	if (leave_open || !zf) {
@@ -10,27 +57,32 @@ index d5e318e2..09fc277c 100644
 +		/* Chimera: the disk is read whole into the machine's memory and
 +		 * written there. The user's file is never written to, a savestate
 +		 * holds the disk as the machine left it, and the disk can be
-+		 * written to whatever the file's own permissions are. */
-+		struct zfile *f = zfile_fopen (outname, _T("rb"), ZFD_NORMAL | ZFD_DISKHISTORY);
-+		if (f) {
-+			uae_s64 size = zfile_size (f);
-+			struct zfile *m = size > 0 ? zfile_fopen_empty (NULL, zfile_getname (f), size) : NULL;
-+			uae_u8 *bytes = m ? xmalloc (uae_u8, (size_t)size) : NULL;
-+			if (bytes) {
-+				zfile_fseek (f, 0, SEEK_SET);
-+				zfile_fread (bytes, 1, (size_t)size, f);
-+				zfile_fwrite (bytes, 1, (size_t)size, m);
-+				zfile_fseek (m, 0, SEEK_SET);
-+				xfree (bytes);
-+				zfile_fclose (f);
-+				f = m;
-+			} else if (m) {
-+				zfile_fclose (m);
-+				m = NULL;
++		 * written to whatever the file's own permissions are. A disk taken
++		 * out keeps what was written to it (chimera_disk_keep). */
++		struct zfile *f = NULL;
++		int idx = chimera_disk_find (outname);
++		if (idx < 0) {
++			struct zfile *file = zfile_fopen (outname, _T("rb"), ZFD_NORMAL | ZFD_DISKHISTORY);
++			uae_s64 size = file ? zfile_size (file) : 0;
++			if (file && size > 0 && chimera_disk_count < CHIMERA_MAX_DISKS) {
++				idx = chimera_disk_count++;
++				_tcsncpy (chimera_disks[idx].name, outname, MAX_DPATH - 1);
++				chimera_disks[idx].size = (size_t)size;
++				chimera_disks[idx].data = xmalloc (uae_u8, (size_t)size);
++				zfile_fseek (file, 0, SEEK_SET);
++				zfile_fread (chimera_disks[idx].data, 1, (size_t)size, file);
 +			}
-+			if (wrprot)
-+				*wrprot = m ? 0 : 1;
++			zfile_fclose (file);
 +		}
++		if (idx >= 0) {
++			f = zfile_fopen_empty (NULL, chimera_disks[idx].name, chimera_disks[idx].size);
++			if (f) {
++				zfile_fwrite (chimera_disks[idx].data, 1, chimera_disks[idx].size, f);
++				zfile_fseek (f, 0, SEEK_SET);
++			}
++		}
++		if (wrprot)
++			*wrprot = f ? 0 : 1;
 +#else
  		struct zfile *f = zfile_fopen (outname, _T("r+b"), ZFD_NORMAL | ZFD_DISKHISTORY);
  		if (!f) {
