@@ -1,0 +1,44 @@
+diff --git a/sources/src/disk.c b/sources/src/disk.c
+index d5e318e2..09fc277c 100644
+--- a/sources/src/disk.c
++++ b/sources/src/disk.c
+@@ -1000,12 +1000,39 @@ int DISK_validate_filename (struct uae_prefs *p, const TCHAR *fname_in, int num,
+ 		_tcscpy(outfname, outname);
+ 
+ 	if (leave_open || !zf) {
++#ifdef CHIMERA_CORE
++		/* Chimera: the disk is read whole into the machine's memory and
++		 * written there. The user's file is never written to, a savestate
++		 * holds the disk as the machine left it, and the disk can be
++		 * written to whatever the file's own permissions are. */
++		struct zfile *f = zfile_fopen (outname, _T("rb"), ZFD_NORMAL | ZFD_DISKHISTORY);
++		if (f) {
++			uae_s64 size = zfile_size (f);
++			struct zfile *m = size > 0 ? zfile_fopen_empty (NULL, zfile_getname (f), size) : NULL;
++			uae_u8 *bytes = m ? xmalloc (uae_u8, (size_t)size) : NULL;
++			if (bytes) {
++				zfile_fseek (f, 0, SEEK_SET);
++				zfile_fread (bytes, 1, (size_t)size, f);
++				zfile_fwrite (bytes, 1, (size_t)size, m);
++				zfile_fseek (m, 0, SEEK_SET);
++				xfree (bytes);
++				zfile_fclose (f);
++				f = m;
++			} else if (m) {
++				zfile_fclose (m);
++				m = NULL;
++			}
++			if (wrprot)
++				*wrprot = m ? 0 : 1;
++		}
++#else
+ 		struct zfile *f = zfile_fopen (outname, _T("r+b"), ZFD_NORMAL | ZFD_DISKHISTORY);
+ 		if (!f) {
+ 			if (wrprot)
+ 				*wrprot = 1;
+ 			f = zfile_fopen (outname, _T("rb"), ZFD_NORMAL | ZFD_DISKHISTORY);
+ 		}
++#endif
+ 		if (f && crc32)
+ 			*crc32 = zfile_crc32 (f);
+ 		if (!zf) {

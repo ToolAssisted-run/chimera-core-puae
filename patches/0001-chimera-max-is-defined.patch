@@ -1,0 +1,12 @@
+diff --git a/libretro/libretro-core.c b/libretro/libretro-core.c
+index 16552766..f24a3172 100644
+--- a/libretro/libretro-core.c
++++ b/libretro/libretro-core.c
+@@ -2,6 +2,7 @@
+ #include "libretro-core.h"
+ #include "libretro-mapper.h"
+ #include "libretro-graph.h"
++#include <retro_miscellaneous.h> /* MAX: no other header here defines it */
+ 
+ #include "retrodep/WHDLoad_files.zip.c"
+ #include "retrodep/WHDLoad_hdf.gz.c"

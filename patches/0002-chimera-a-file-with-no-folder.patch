@@ -1,0 +1,19 @@
+diff --git a/libretro/libretro-glue.c b/libretro/libretro-glue.c
+index d14fa10f..daa8de8d 100644
+--- a/libretro/libretro-glue.c
++++ b/libretro/libretro-glue.c
+@@ -1909,6 +1909,14 @@ uint64_t fsize(const char *path)
+ 
+ void path_join(char* out, const char* basedir, const char* filename)
+ {
++#ifdef CHIMERA_CORE
++   /* Chimera: the sandbox's files have no folders; no folder, the bare name */
++   if (!basedir || !*basedir)
++   {
++      snprintf(out, RETRO_PATH_MAX, "%s", filename);
++      return;
++   }
++#endif
+    snprintf(out, RETRO_PATH_MAX, "%s%s%s", basedir, DIR_SEP_STR, filename);
+ }
+ 
