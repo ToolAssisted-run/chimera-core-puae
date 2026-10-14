@@ -53,3 +53,16 @@ int access(const char *path, int mode)
 	(void)mode;
 	return stat(path, &st);
 }
+
+/* PUAE joins the current folder to a CD image's name (cfgfile.c). A sandbox
+ * has no folders: the folder is "", and the join is the bare name. */
+char *getcwd(char *buf, size_t size)
+{
+	if (!buf || size == 0) {
+		errno = ERANGE;
+		return NULL;
+	}
+	buf[0] = '\0';
+	errno = ENOENT;
+	return NULL;
+}

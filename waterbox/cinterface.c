@@ -29,6 +29,7 @@
 #include "memory.h"
 #include "inputdevice.h"
 #include "disk.h"
+#include "libretro-mapper.h"   /* RETRO_DEVICE_PUAE_CD32PAD */
 
 /* ---- what went wrong, for Chimera to show -------------------------------- */
 static char g_loadError[512];
@@ -150,6 +151,9 @@ static int port_setting(const char *name, int otherwise)
 #define MAX_DISKS 20
 static char g_disks[MAX_DISKS][256];
 static int g_diskCount, g_selected;
+/* the CD32 and the CDTV take a disc, not floppy disks */
+static int g_isCd;
+static char g_nvram[256];   /* the save memory the project brings, or "" */
 
 static int button_active(int i)
 {
@@ -158,6 +162,7 @@ static int button_active(int i)
 	if (i <= kP1Yellow) return g_port2 == kPad;
 	if (i <= kP2Fire2) return g_port1 == kJoystick;
 	if (i <= kMouseMiddle) return g_port1 == kMouse;
+	if (g_isCd) return 0;
 	return g_diskCount > 1 || i == kEjectDisk;
 }
 
@@ -167,33 +172,42 @@ const char *chimera_extra_config(void)
 {
 	static const char *const port1[] = { "joyport0=none\n", "joyport0=mouse\n", "joyport0=joy1\njoyport0mode=djoy\n", "" };
 	static const char *const port2[] = { "joyport1=none\n", "", "joyport1=joy0\njoyport1mode=djoy\n", "joyport1=joy0\njoyport1mode=cd32joy\n" };
-	snprintf(g_extraConfig, sizeof g_extraConfig, "%s%s", port1[g_port1], port2[g_port2]);
+	/* the CD32's save memory is read from the project's file, if it brings
+	 * one, and then kept in memory only (patch 0009) */
+	snprintf(g_extraConfig, sizeof g_extraConfig, "%s%sflash_file=%s\n", port1[g_port1], port2[g_port2], g_nvram);
 	return g_extraConfig;
 }
 
 /* one joystick's directions and two buttons, as UAE takes them */
-static void give_joystick(int joy, int up, int pad)
+static void give_joystick(int joy, int up)
 {
 	setjoystickstate(joy, 0, g_held[up + 2] ? -1 : g_held[up + 3] ? 1 : 0, 1);
 	setjoystickstate(joy, 1, g_held[up] ? -1 : g_held[up + 1] ? 1 : 0, 1);
-	setjoybuttonstate(joy, pad ? JOYBUTTON_CD32_RED : JOYBUTTON_1, g_held[up + 4]);
-	setjoybuttonstate(joy, pad ? JOYBUTTON_CD32_BLUE : JOYBUTTON_2, g_held[up + 5]);
+	setjoybuttonstate(joy, 0, g_held[up + 4]);
+	setjoybuttonstate(joy, 1, g_held[up + 5]);
 }
+
+/* A joystick's buttons are numbered as the device's own (not as UAE's bits
+ * for what the port reads): on the CD32's pad in a port in its pad mode,
+ * UAE gives 0 and 1 to red and blue and 2 to 6 to green, yellow, rewind,
+ * forward and play (inputdevice.c, the CD32 mapping; libretro-mapper.c
+ * numbers them so). */
+enum { kPadGreen = 2, kPadYellow, kPadRewind, kPadForward, kPadPlay };
 
 static void give_controls(void)
 {
 	if (g_port2 == kJoystick || g_port2 == kPad)
-		give_joystick(0, kP1Up, g_port2 == kPad);
+		give_joystick(0, kP1Up);
 	if (g_port2 == kPad)
 	{
-		setjoybuttonstate(0, JOYBUTTON_CD32_PLAY, g_held[kP1Play]);
-		setjoybuttonstate(0, JOYBUTTON_CD32_RWD, g_held[kP1Rewind]);
-		setjoybuttonstate(0, JOYBUTTON_CD32_FFW, g_held[kP1Forward]);
-		setjoybuttonstate(0, JOYBUTTON_CD32_GREEN, g_held[kP1Green]);
-		setjoybuttonstate(0, JOYBUTTON_CD32_YELLOW, g_held[kP1Yellow]);
+		setjoybuttonstate(0, kPadPlay, g_held[kP1Play]);
+		setjoybuttonstate(0, kPadRewind, g_held[kP1Rewind]);
+		setjoybuttonstate(0, kPadForward, g_held[kP1Forward]);
+		setjoybuttonstate(0, kPadGreen, g_held[kP1Green]);
+		setjoybuttonstate(0, kPadYellow, g_held[kP1Yellow]);
 	}
 	if (g_port1 == kJoystick)
-		give_joystick(1, kP2Up, 0);
+		give_joystick(1, kP2Up);
 	if (g_port1 == kMouse)
 	{
 		if (g_axis[kMouseX]) setmousestate(0, 0, g_axis[kMouseX], 0);
@@ -397,10 +411,37 @@ ECL_EXPORT const char *DescribeDips(void) { return ""; }
 ECL_EXPORT int Init(void)
 {
 	g_loadError[0] = '\0';
-	g_diskCount = wbx_slot_count("disk");
+	char model[32] = "A500", kick[32] = "auto";
+	wbx_setting_str("model", model, sizeof model);
+	wbx_setting_str("kickstart", kick, sizeof kick);
+	g_isCd = !strcmp(model, "CD32") || !strcmp(model, "CD32FR") || !strcmp(model, "CDTV");
+	const char *slot = g_isCd ? "disc" : "disk";
+	g_diskCount = wbx_slot_count(slot);
 	if (g_diskCount > MAX_DISKS) g_diskCount = MAX_DISKS;
+	if (g_isCd && g_diskCount > 1) g_diskCount = 1;
 	for (int i = 0; i < g_diskCount; i++)
-		wbx_slot_name("disk", i, g_disks[i], sizeof g_disks[i]);
+		wbx_slot_name(slot, i, g_disks[i], sizeof g_disks[i]);
+	g_nvram[0] = '\0';
+	if (wbx_slot_count("savedata") > 0)
+	{
+		/* the CD32's save memory, as Export Save Data writes it: 1 KB. Any
+		 * other file would not be read, so it is refused */
+		wbx_slot_name("savedata", 0, g_nvram, sizeof g_nvram);
+		FILE *f = fopen(g_nvram, "rb");
+		long size = -1;
+		if (f && fseek(f, 0, SEEK_END) == 0) size = ftell(f);
+		if (f) fclose(f);
+		if (strcmp(model, "CD32") && strcmp(model, "CD32FR"))
+		{
+			snprintf(g_loadError, sizeof g_loadError, "save data (%s) is the CD32's save memory, and the %s has none", g_nvram, model);
+			return 0;
+		}
+		if (size != 1024)
+		{
+			snprintf(g_loadError, sizeof g_loadError, "%s is not the CD32's save memory, which is 1024 bytes (it has %ld)", g_nvram, size);
+			return 0;
+		}
+	}
 	if (g_diskCount == 0)
 	{
 		/* a disk opened with no project is mounted under its own name */
@@ -415,8 +456,21 @@ ECL_EXPORT int Init(void)
 	}
 	if (g_diskCount == 0)
 	{
-		snprintf(g_loadError, sizeof g_loadError, "no disk was given");
+		snprintf(g_loadError, sizeof g_loadError, g_isCd ? "no disc was given" : "no disk was given");
 		return 0;
+	}
+	{
+		/* a disc on a floppy Amiga, or a floppy on a CD32, is a wrong Model */
+		const char *dot = strrchr(g_disks[0], '.');
+		static const char *const kDisc[] = { ".cue", ".ccd", ".iso", ".chd", ".nrg", ".mds" };
+		int disc = 0;
+		for (size_t i = 0; dot && i < sizeof kDisc / sizeof kDisc[0]; i++)
+			disc |= !strcasecmp(dot, kDisc[i]);
+		if (disc != g_isCd)
+		{
+			snprintf(g_loadError, sizeof g_loadError, disc ? "%s is a CD: set Model to CD32" : "%s is not a CD image, and the %s takes a CD", g_disks[0], model);
+			return 0;
+		}
 	}
 	g_selected = 0;
 
@@ -426,7 +480,7 @@ ECL_EXPORT int Init(void)
 	}
 	g_frameCount = 0;
 	g_port1 = port_setting("port1", kMouse);
-	g_port2 = port_setting("port2", kJoystick);
+	g_port2 = port_setting("port2", g_isCd ? kPad : kJoystick);   /* the package says the same */
 	if (g_port1 == kPad) g_port1 = kJoystick;   /* the CD32's pad goes in port 2 only */
 	for (int k = 0; k < KEY_COUNT; k++)
 		snprintf(g_keyNames[k], sizeof g_keyNames[k], "Key %s", kKeys[k].name);
@@ -439,10 +493,10 @@ ECL_EXPORT int Init(void)
 			{ "A500PLUS", "amiga-os-204.rom" }, { "A600", "amiga-os-310-a600.rom" }, { "A2000", "amiga-os-310-a600.rom" },
 			{ "A1200OG", "amiga-os-310-a1200.rom" }, { "A1200", "amiga-os-310-a1200.rom" },
 			{ "A4030", "amiga-os-310-a4000.rom" }, { "A4040", "amiga-os-310-a4000.rom" },
+			{ "CD32", "amiga-os-310-cd32.rom" }, { "CD32", "amiga-os-310-cd32-ext.rom" },
+			{ "CD32FR", "amiga-os-310-cd32.rom" }, { "CD32FR", "amiga-os-310-cd32-ext.rom" },
+			{ "CDTV", "amiga-os-130.rom" }, { "CDTV", "amiga-os-130-cdtv-ext.rom" },
 		};
-		char model[32] = "A500", kick[32] = "auto";
-		wbx_setting_str("model", model, sizeof model);
-		wbx_setting_str("kickstart", kick, sizeof kick);
 		for (size_t i = 0; i < sizeof kRoms / sizeof kRoms[0]; i++)
 		{
 			if (strcmp(kRoms[i].model, model) || strcmp(kick, "auto")) continue;
@@ -463,6 +517,12 @@ ECL_EXPORT int Init(void)
 	retro_set_input_poll(input_poll);
 	retro_set_input_state(input_state);
 	retro_init();
+	/* the CD32's pad: upstream's input maps the device's seven buttons to the
+	 * pad's only for a port the frontend says holds one (libretro-glue.c,
+	 * input_get_default_joystick); otherwise only red and blue arrive.
+	 * libretro's port 0 is the Amiga's port 2. */
+	if (g_port2 == kPad)
+		retro_set_controller_port_device(0, RETRO_DEVICE_PUAE_CD32PAD);
 
 	struct retro_game_info info = { g_disks[0], NULL, 0, NULL };
 	if (!retro_load_game(&info))
@@ -547,10 +607,22 @@ extern int chimera_disk_changed(int i);
 static int g_saveIndex[32], g_saveCount;
 static char g_saveNames[32][MAX_DPATH + 8];
 
+/* On the CD32 it is the save memory, as cd32.nvr, once anything is in it */
+extern uae_u8 *chimera_cd32_nvram(int *size);
+static const uint8_t *g_nvramBytes;
+static int g_nvramSize;
+
 ECL_EXPORT int32_t GetSaveDataFileCount(void)
 {
-	chimera_disks_sync();
 	g_saveCount = 0;
+	if (g_isCd)
+	{
+		g_nvramBytes = chimera_cd32_nvram(&g_nvramSize);
+		for (int i = 0; g_nvramBytes && i < g_nvramSize; i++)
+			if (g_nvramBytes[i]) return 1;
+		return 0;
+	}
+	chimera_disks_sync();
 	for (int i = 0; i < chimera_disk_count && g_saveCount < 32; i++)
 	{
 		if (!chimera_disk_changed(i)) continue;
@@ -567,6 +639,18 @@ ECL_EXPORT int32_t GetSaveDataFileCount(void)
 	}
 	return g_saveCount;
 }
-ECL_EXPORT const char *GetSaveDataFileName(int32_t i) { return i >= 0 && i < g_saveCount ? g_saveNames[i] : ""; }
-ECL_EXPORT int64_t GetSaveDataFileSize(int32_t i) { return i >= 0 && i < g_saveCount ? (int64_t)chimera_disks[g_saveIndex[i]].size : 0; }
-ECL_EXPORT const uint8_t *GetSaveDataFileBuffer(int32_t i) { return i >= 0 && i < g_saveCount ? chimera_disks[g_saveIndex[i]].data : NULL; }
+ECL_EXPORT const char *GetSaveDataFileName(int32_t i)
+{
+	if (g_isCd) return i == 0 ? "cd32.nvr" : "";
+	return i >= 0 && i < g_saveCount ? g_saveNames[i] : "";
+}
+ECL_EXPORT int64_t GetSaveDataFileSize(int32_t i)
+{
+	if (g_isCd) return i == 0 ? g_nvramSize : 0;
+	return i >= 0 && i < g_saveCount ? (int64_t)chimera_disks[g_saveIndex[i]].size : 0;
+}
+ECL_EXPORT const uint8_t *GetSaveDataFileBuffer(int32_t i)
+{
+	if (g_isCd) return i == 0 ? g_nvramBytes : NULL;
+	return i >= 0 && i < g_saveCount ? chimera_disks[g_saveIndex[i]].data : NULL;
+}

@@ -4,7 +4,7 @@ small test program for the PUAE core's tests. It needs no file of anyone's:
 it boots with the Kickstart PUAE carries (AROS's) as well as with
 Commodore's.
 
-usage: make-amiga-disk.py <out.adf> [nopad]
+usage: make-amiga-disk.py <out.adf> [nopad | cd32pad]
 
 The program, hand-assembled below (68000 machine code), runs from the boot
 block, which the Kickstart loads and calls with the drive's I/O request in
@@ -24,7 +24,10 @@ A1 and the system in A6. It:
       the count at 0x7E00A, and answers the keyboard as the machine must;
     - makes the background colour the frame count plus both ports' words.
 Made with "nopad" it reads none of the controls (only the clock), so every
-frame is a lag frame.
+frame is a lag frame. Made with "cd32pad" it also reads the CD32's pad in
+port 2 each frame, as games do, and writes its seven buttons to 0x7E010
+(bits 7 to 1: blue, red, yellow, green, forward, rewind, play; 1 while
+held).
 """
 import struct
 import sys
@@ -40,7 +43,7 @@ def l(v):
     return struct.pack(">I", v & 0xFFFFFFFF)
 
 
-def program(nopad):
+def program(nopad, cd32pad=False):
     code = bytearray()
     # ---- the disk write, through the drive's request (A1), A6 = exec
     code += w(0x2A49)                          # movea.l a1,a5
@@ -67,7 +70,7 @@ def program(nopad):
     code += w(0x397C) + w(0xFF00) + w(0x34)    # move.w #$ff00,POTGO(a4)  (second buttons readable)
     code += w(0x1039) + l(0xBFED01)            # move.b $bfed01,d0  (clear CIA-A's interrupt flags)
     code += w(0x7E00)                          # moveq #0,d7
-    for addr in range(BASE, BASE + 16, 2):
+    for addr in range(BASE, BASE + 18, 2):
         code += w(0x33FC) + w(0) + l(addr)     # move.w #0,addr
     loop = len(code)
     # wait for the vertical blank, and clear it
@@ -81,6 +84,30 @@ def program(nopad):
         code += w(0x33EC) + w(0x0A) + l(BASE + 2)   # move.w JOY0DAT(a4),$7e002
         code += w(0x13D3) + l(BASE + 4)             # move.b (a3),$7e004
         code += w(0x33EC) + w(0x16) + l(BASE + 6)   # move.w POTGOR(a4),$7e006
+        if cd32pad:
+            # the CD32's pad in port 2, read as games read it: the fire line
+            # (CIA-A port A bit 7) is made an output and clocks the pad's
+            # shift register, port 2's pin 5 is held low through POTGO, and
+            # each of the seven buttons comes in on pin 9 (POTINP bit 14, 0
+            # while held): blue, red, yellow, green, forward, rewind, play
+            code += w(0x08F9) + w(7) + l(0xBFE201)  # bset #7,$bfe201  (DDRA: fire 2 out)
+            code += w(0x0893) + w(7)                # bclr #7,(a3)
+            code += w(0x397C) + w(0x6F00) + w(0x34)  # move.w #$6f00,POTGO(a4)
+            code += w(0x7000)                       # moveq #0,d0
+            code += w(0x7207)                       # moveq #7,d1
+            bit = len(code)
+            for _ in range(8):
+                code += w(0x4A13)                   # tst.b (a3)   (time for the pad)
+            code += w(0x342C) + w(0x16)             # move.w POTINP(a4),d2
+            code += w(0x08D3) + w(7)                # bset #7,(a3)  (the clock up...
+            code += w(0x0893) + w(7)                # bclr #7,(a3)  ...and down)
+            code += w(0x0802) + w(14)               # btst #14,d2
+            code += w(0x6602)                       # bne.s +2
+            code += w(0x03C0)                       # bset d1,d0   (held)
+            code += w(0x51C9) + w((bit - (len(code) + 2)) & 0xFFFF)  # dbf d1,bit
+            code += w(0x08B9) + w(7) + l(0xBFE201)  # bclr #7,$bfe201
+            code += w(0x397C) + w(0xFF00) + w(0x34)  # move.w #$ff00,POTGO(a4)
+            code += w(0x33C0) + l(BASE + 0x10)      # move.w d0,$7e010
         # a key: CIA-A's serial port flag (bit 3 of its interrupt flags)
         key = len(code)
         code += w(0x1039) + l(0xBFED01)        # move.b $bfed01,d0
@@ -125,7 +152,8 @@ def checksum(block):
 def main():
     out = sys.argv[1]
     nopad = len(sys.argv) > 2 and sys.argv[2] == "nopad"
-    code = program(nopad)
+    cd32pad = len(sys.argv) > 2 and sys.argv[2] == "cd32pad"
+    code = program(nopad, cd32pad)
     assert 12 + len(code) <= 1024, len(code)
     block = bytearray(1024)
     block[0:4] = b"DOS\0"

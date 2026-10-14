@@ -111,7 +111,7 @@ check "source:patched" "extern/libretro-uae is the pinned commit with the $patch
 
 # a sandbox build that failed must not be tested as the previous one
 stale=""
-for src in "$here"/cinterface.c "$root"/patches/*.patch; do
+for src in "$here"/cinterface.c "$here"/chimera-threads.c "$root"/patches/*.patch; do
 	[ -e "$src" ] || continue
 	[ "$core" -nt "$src" ] || stale="$stale $(basename "$src")"
 done
@@ -145,7 +145,7 @@ for line in open(sys.argv[2]):
 src = open(sys.argv[3]).read()
 names = re.findall(r'"([^"]+)"', re.search(r"kAxisNames\[kAxes\] = \{([^}]*)\}", src).group(1))
 m = cfg["machines"]
-ok = len(m) == 1 and m[0]["input"]["buttons"] == buttons and [a["name"] for a in m[0]["input"]["axes"]] == names and len(names) == axes
+ok = [x["id"] for x in m] == ["AMIGA", "CD32"] and all(x["input"] == m[0]["input"] for x in m) and m[0]["input"]["buttons"] == buttons and [a["name"] for a in m[0]["input"]["axes"]] == names and len(names) == axes
 sys.exit(0 if ok and len(buttons) == 119 and axes == 2 else 1)
 PY
 if [ -n "$chimera_root" ] && [ -f "$chimera_root/source/gui/Chimera.Input/KeyMouseInput/DistinctKey.cs" ]; then
@@ -192,6 +192,20 @@ folder none '{"kickstart":"aros","port1":"none","port2":"cd32pad"}' "$prog"
 "$native" "$work/none" --frames 1 --list-panel > "$work/none-panel.out" 2> /dev/null
 check "amiga:controls" "which controls are live follows the ports: $(grep -c ' active$' "$work/panel.out") with a mouse and a joystick, $(grep -c ' active$' "$work/none-panel.out") with nothing in port 1 and the CD32's pad in port 2 (its five more buttons, no mouse)" \
 	sh -c "grep -q \"'P1 Play' active\" '$work/none-panel.out' && ! grep -q \"'Mouse Left' active\" '$work/none-panel.out' && grep -q \"'Mouse Left' active\" '$work/panel.out' && ! grep -q \"'P1 Play' active\" '$work/panel.out'"
+
+# the CD32's pad in port 2, read as games read it, one bit a clock of the
+# fire line (the cd32pad program writes the seven buttons to 0x7E010)
+python3 "$root/tests/make-amiga-disk.py" "$work/disks/pad.adf" cd32pad > /dev/null
+folder pad '{"kickstart":"aros","port1":"none","port2":"cd32pad"}' "$work/disks/pad.adf"
+nat pad-idle pad --frames 900 --dump-domain "Chip RAM" "$work/pad-idle.ram"
+padbits=""
+for b in "P1 Fire" "P1 Fire 2" "P1 Play" "P1 Rewind" "P1 Forward" "P1 Green" "P1 Yellow"; do
+	n="pad-$(echo "$b" | tr -d ' ')"
+	nat "$n" pad --frames 900 --press "$(index pad "$b")":700:300 --dump-domain "Chip RAM" "$work/$n.ram"
+	padbits="$padbits $(byte "$work/$n.ram" 17)"
+done
+check "amiga:cd32-pad" "the CD32's pad in port 2: each button held alone is its own bit of what the pad shifts out (Fire, Fire 2, Play, Rewind, Forward, Green, Yellow:$padbits; red 40, blue 80, play 02, rewind 04, forward 08, green 10, yellow 20), none held $(byte "$work/pad-idle.ram" 17)" \
+	[ "$padbits" = " 40 80 02 04 08 10 20" -a "$(byte "$work/pad-idle.ram" 17)" = 00 ]
 
 # every kind of control in one run, native and sandbox
 keysrun="--frames 900 --report 25 --press $(index pr "P1 Up"):700:20 --press $(index pr "P1 Fire"):720:10 --press $(index pr "Mouse Left"):740:10 --press $(index pr "Key Space"):800:5 --press $(index pr "P1 Fire 2"):820:30"
@@ -333,6 +347,97 @@ if [ -n "$d2" ] && [ -f "$kicks/amiga-os-130.rom" ]; then
 else
 	report "game:disk-change" SKIP "no game on two disks (AMIGA_GAME2) or no Kickstart 1.3"
 fi
+
+# ------------------------------------------------- the CD32
+# A disc instead of floppy disks: a CD this script writes (an audio track of
+# a tone), which the CD32's start-up screen shows in its CD player and plays
+# when red is pressed, and a game's CD (AMIGA_CD32_GAME, a .cue with its
+# tracks; tests/games-local/worms when not given). The drive and CD audio
+# run on UAE's threads, which the core runs one at a time (patch 0008): the
+# sandbox must give the native build's digests, with states too.
+cd32game="${AMIGA_CD32_GAME:-$root/tests/games-local/worms}"
+cdfolder() { # cdfolder <name> <settings> <cue folder> <cue>: a CD32 work folder
+	mkdir -p "$work/$1"
+	for f in "$3"/*; do ln -sf "$f" "$work/$1/$(basename "$f")"; done
+	for f in amiga-os-310-cd32.rom amiga-os-310-cd32-ext.rom; do ln -sf "$kicks/$f" "$work/$1/$f"; done
+	printf '{"disc":["%s"]}' "$4" > "$work/$1/slots"
+	printf '%s' "$2" > "$work/$1/settings"
+}
+if [ -f "$kicks/amiga-os-310-cd32.rom" ] && [ -f "$kicks/amiga-os-310-cd32-ext.rom" ]; then
+	mkdir -p "$work/tonecd"
+	python3 "$root/tests/make-audio-cd.py" "$work/tonecd" > /dev/null
+	cdfolder acd '{"model":"CD32"}' "$work/tonecd" tone.cue
+	red="$(index acd "P1 Fire")"
+	acdrun="--frames 2400 --report 20 --press $red:800:5"
+	nat acd-idle acd --frames 2400 --report 20
+	nat acd acd $acdrun
+	box acd-box acd $acdrun
+	box acd-rerecord acd $acdrun --rerecord
+	box acd-session acd $acdrun --session
+	box acd-rewind acd --frames 2400 --report 5 --press "$red":800:5 --rewind
+	for n in acd acd-idle acd-box acd-rerecord acd-session; do stream "$work/$n.out" > "$work/$n.stream"; done
+	sounds() { awk -v a="$2" -v b="$3" '$2 > a && $2 <= b {print $10}' "$1" | sort -u | wc -l; }
+	check "cd32:audio-cd" "the CD32 starts with an audio CD in its CD player ($(awk '{print $7}' "$work/acd.stream" | sort -u | wc -l) pictures); red plays the track: $(sounds "$work/acd.stream" 0 800) sound before it and $(sounds "$work/acd.stream" 900 2400) different sounds in the 75 reports after, where the run without it keeps $(sounds "$work/acd-idle.stream" 900 2400)" \
+		[ "$(sounds "$work/acd.stream" 0 800)" = 1 -a "$(sounds "$work/acd.stream" 900 2400)" -gt 30 -a "$(sounds "$work/acd-idle.stream" 900 2400)" = 1 ]
+	check "cd32:sandbox" "native and sandbox print the same $(wc -l < "$work/acd.stream") digests while the drive and CD audio run" same "$work/acd.stream" "$work/acd-box.stream"
+	check "cd32:states" "while the CD plays, a state saved and loaded every frame, and a state moved to a new sandbox, change nothing" \
+		sh -c "cmp -s '$work/acd-box.stream' '$work/acd-rerecord.stream' && cmp -s '$work/acd-box.stream' '$work/acd-session.stream'"
+	check "cd32:state-rewind" "a state kept at frame 1200, while the CD plays, and loaded at 1800: the frames after the load repeat those after the save" \
+		repeats "$work/acd-rewind.out" 1200 1800 600 5
+
+	# the save memory: the CD32 writes its header into empty save memory as
+	# it starts, which Export Save Data gives out; that file with bytes of
+	# this script's in it is read in and comes back the same; a file of
+	# another size is refused
+	mkdir -p "$work/nv0-out" "$work/nv-out"
+	box nv0 acd --frames 300 --savedata-out "$work/nv0-out"
+	python3 - "$work/nv0-out/cd32.nvr" "$work/tonecd/mark.nvr" "$work/tonecd/short.nvr" <<'PY'
+import sys
+try:
+    b = bytearray(open(sys.argv[1], "rb").read())
+except OSError:
+    b = bytearray(1024)
+b[0x100:0x110] = b"CHIMERA-NVR-TEST"
+open(sys.argv[2], "wb").write(b)
+open(sys.argv[3], "wb").write(bytes(512))
+PY
+	cdfolder nv '{"model":"CD32"}' "$work/tonecd" tone.cue
+	printf '{"disc":["tone.cue"],"savedata":["mark.nvr"]}' > "$work/nv/slots"
+	box nv nv --frames 300 --savedata-out "$work/nv-out"
+	cdfolder nvbad '{"model":"CD32"}' "$work/tonecd" tone.cue
+	printf '{"disc":["tone.cue"],"savedata":["short.nvr"]}' > "$work/nvbad/slots"
+	nat nvbad nvbad --frames 1
+	check "cd32:save-memory" "the CD32's save memory: started empty, the CD32 writes its header ($(od -An -tx1 -N3 "$work/nv0-out/cd32.nvr" 2> /dev/null | tr -d ' ')) and Export Save Data gives it as cd32.nvr; that file with 16 bytes of this script's at 0x100 is read in and comes back the same; a file of 512 bytes is refused" \
+		sh -c "[ \"\$(od -An -tx1 -N3 '$work/nv0-out/cd32.nvr' | tr -d ' ')\" = 0056a9 ] && cmp -s '$work/tonecd/mark.nvr' '$work/nv-out/cd32.nvr' && grep -q 'Init failed.*short.nvr is not' '$work/nvbad.out' '$work/nvbad.err'"
+
+	cue="$(ls "$cd32game"/*.cue 2> /dev/null | head -1)"
+	if [ -n "$cue" ]; then
+		cdfolder cg '{"model":"CD32"}' "$cd32game" "$(basename "$cue")"
+		cgrun="--frames 4000 --report 50 --press $(index cg "P1 Fire"):3000:5 --press $(index cg "P1 Right"):3200:30"
+		nat cg cg $cgrun
+		box cg-box cg $cgrun
+		box cg-rerecord cg --frames 1500 --report 50 --rerecord
+		nat cg-short cg --frames 1500 --report 50
+		for n in cg cg-box cg-rerecord cg-short; do stream "$work/$n.out" > "$work/$n.stream"; done
+		check "cd32:game" "$(basename "$cue") boots from its CD ($(awk '{print $7}' "$work/cg.stream" | sort -u | wc -l) different pictures in 80 reports), and the sandbox gives the native build's digests, with presses" \
+			sh -c "[ \$(awk '{print \$7}' '$work/cg.stream' | sort -u | wc -l) -gt 20 ] && cmp -s '$work/cg.stream' '$work/cg-box.stream'"
+		check "cd32:game-states" "while the game loads from its CD, a state saved and loaded every frame changes nothing (1,500 frames)" same "$work/cg-short.stream" "$work/cg-rerecord.stream"
+	else
+		for t in cd32:game cd32:game-states; do report "$t" SKIP "no CD32 game (a .cue in AMIGA_CD32_GAME)"; done
+	fi
+else
+	for t in cd32:audio-cd cd32:sandbox cd32:states cd32:state-rewind cd32:save-memory cd32:game cd32:game-states; do
+		report "$t" SKIP "no CD32 Kickstart and extended ROM (amiga-os-310-cd32.rom, amiga-os-310-cd32-ext.rom in AMIGA_KICKSTARTS)"
+	done
+fi
+folder cdwrong '{"model":"CD32","kickstart":"aros"}' "$prog"
+printf '{"disc":["prog.adf"]}' > "$work/cdwrong/slots"
+nat cdwrong cdwrong --frames 1
+folder nocd '{"model":"CD32","kickstart":"aros"}'
+printf '{"disc":[]}' > "$work/nocd/slots"
+nat nocd nocd --frames 1
+check "refused:cd-model" "a CD32 with no disc, or with a floppy disk where its disc goes, is refused, and says so" \
+	sh -c "grep -q 'Init failed.*no disc was given' '$work/nocd.out' '$work/nocd.err' && grep -q 'Init failed.*prog.adf is not a CD image' '$work/cdwrong.out' '$work/cdwrong.err'"
 
 echo
 echo "$ok passed, $failed failed, $skipped skipped"

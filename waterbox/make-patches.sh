@@ -18,12 +18,22 @@ series='
 0005-chimera-a-write-of-vposw-does-not-stay|sources/src/custom.c
 0006-chimera-config-names-are-set|sources/src/misc.c
 0007-chimera-the-pc-mouse-stub-returns-false|sources/src/x86.c
+0008-chimera-threads-run-one-at-a-time|retrodep/threaddep/thread.h retrodep/threaddep/thread.c sources/src/include/sleep.h sources/src/devices.c
+0009-chimera-the-cd32-save-memory-stays-in-memory|sources/src/akiko.c
 '
 
+# a patch that did not change keeps its file (and its time: the test script
+# asks whether the core is newer than its patches)
+keep="$(mktemp -d)"
+trap 'rm -rf "${keep:?}"' EXIT
+cp -p "$root"/patches/*.patch "$keep"/ 2> /dev/null || true
 rm -f "$root"/patches/*.patch
 printf '%s\n' "$series" | grep '|' | while IFS='|' read -r name files; do
 	# shellcheck disable=SC2086
 	git -C "$tree" diff -- $files > "$root/patches/$name.patch"
+	if cmp -s "$root/patches/$name.patch" "$keep/$name.patch"; then
+		cp -p "$keep/$name.patch" "$root/patches/$name.patch"
+	fi
 	echo "$name.patch: $(grep -c '^diff --git' "$root/patches/$name.patch") files"
 done
 # a changed file no patch names would be lost by a fresh clone

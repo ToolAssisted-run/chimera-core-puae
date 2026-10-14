@@ -119,7 +119,7 @@ foreach n : ['compat/compat_strl.c', 'compat/compat_strcasestr.c', 'compat/fopen
   uae_names += lrc / n
 endforeach
 
-core_sources = files(uae_names) + files('waterbox/cinterface.c')
+core_sources = files(uae_names) + files('waterbox/cinterface.c', 'waterbox/chimera-threads.c')
 
 if meson.is_cross_build()
   # ---- the guest: core.wbx --------------------------------------------------

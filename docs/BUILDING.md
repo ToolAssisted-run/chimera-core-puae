@@ -81,6 +81,8 @@ SKIP without them:
 | `game:` | a game on one disk, as a folder with an `.adf` file | `tests/games-local/ninja` | `AMIGA_GAME` |
 | `game:disk-change` | a game on two disks | `tests/games-local/budokan` | `AMIGA_GAME2` |
 | `game:` | Kickstart 1.3 (and 3.1 for the A1200), under the package's names | `tests/roms-local/amiga-os-130.rom`, `amiga-os-310-a1200.rom` | `AMIGA_KICKSTARTS` (a folder) |
+| `cd32:` | the CD32's Kickstart and extended ROM; the tests write an audio CD of their own (`tests/make-audio-cd.py`) | `tests/roms-local/amiga-os-310-cd32.rom`, `amiga-os-310-cd32-ext.rom` | `AMIGA_KICKSTARTS` |
+| `cd32:game` | a CD32 game, as a folder with a `.cue` and its track files | `tests/games-local/worms` | `AMIGA_CD32_GAME` |
 
 Copy the files there; do not link them from where you keep them. Without
 `CHIMERA_ROOT` the test that runs the package in Chimera's engine is

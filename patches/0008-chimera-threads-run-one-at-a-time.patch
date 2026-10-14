@@ -1,0 +1,73 @@
+diff --git a/retrodep/threaddep/thread.c b/retrodep/threaddep/thread.c
+index 1839f7b2..af70511f 100644
+--- a/retrodep/threaddep/thread.c
++++ b/retrodep/threaddep/thread.c
+@@ -10,6 +10,8 @@
+   * Idea stolen from SDL.
+   */
+ 
++#ifndef CHIMERA_CORE
++
+ #include "sysconfig.h"
+ #include "sysdeps.h"
+ #include "thread.h"
+@@ -183,3 +185,5 @@ void uae_sem_init (uae_sem_t *sem, int pshared, unsigned int value)
+ 
+ #endif
+ #endif
++
++#endif /* CHIMERA_CORE */
+diff --git a/retrodep/threaddep/thread.h b/retrodep/threaddep/thread.h
+index a3777bf0..90375177 100644
+--- a/retrodep/threaddep/thread.h
++++ b/retrodep/threaddep/thread.h
+@@ -7,6 +7,11 @@
+   * Copyright 2004 Richard Drummond
+   */
+ 
++#ifdef CHIMERA_CORE
++/* The core runs these threads one at a time (waterbox/chimera-threads.h). */
++#include "chimera-threads.h"
++#else
++
+ #ifdef _WIN32
+ #define WIN32_LEAN_AND_MEAN
+ typedef HANDLE uae_sem_t;
+@@ -272,3 +277,5 @@ STATIC_INLINE void uae_set_thread_priority (uae_thread_id *tid, int pri)
+ }
+ 
+ #endif
++
++#endif /* CHIMERA_CORE */
+diff --git a/sources/src/devices.c b/sources/src/devices.c
+index 962d860b..7220c1fe 100644
+--- a/sources/src/devices.c
++++ b/sources/src/devices.c
+@@ -279,6 +279,10 @@ void devices_hsync(void)
+ #endif
+ 
+ 	execute_device_items(device_hsyncs, device_hsync_cnt);
++#ifdef CHIMERA_CORE
++	/* the threads whose emulated time has come run */
++	chimera_threads_hsync();
++#endif
+ }
+ 
+ void devices_rethink_all(void func(void))
+diff --git a/sources/src/include/sleep.h b/sources/src/include/sleep.h
+index 9f73acc8..969ece50 100644
+--- a/sources/src/include/sleep.h
++++ b/sources/src/include/sleep.h
+@@ -22,7 +22,11 @@
+ # endif
+ #endif
+ 
+-#ifdef __LIBRETRO__
++#ifdef CHIMERA_CORE
++/* A thread's sleep is emulated time (waterbox/chimera-threads.h). */
++void chimera_threads_sleep(int ms);
++#define uae_msleep chimera_threads_sleep
++#elif defined(__LIBRETRO__)
+ #include "retro_timers.h"
+ #define uae_msleep retro_sleep
+ #endif

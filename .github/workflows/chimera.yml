@@ -133,7 +133,7 @@ jobs:
           for t in source:patched package:fresh package:controls package:key-names amiga:runs amiga:joystick amiga:mouse \
                    amiga:keyboard amiga:port1-joystick amiga:controls amiga:sandbox amiga:controls-change-the-run \
                    amiga:sound-rate amiga:lag amiga:state-every-frame amiga:state-other-box amiga:state-rewind amiga:disk-write \
-                   amiga:disk-change refused:no-disk refused:kickstart-missing engine:amiga; do
+                   amiga:disk-change amiga:cd32-pad refused:no-disk refused:kickstart-missing refused:cd-model engine:amiga; do
             grep -q "^$t  *PASS " gate.out || { echo "$t did not pass"; exit 1; }
           done
 

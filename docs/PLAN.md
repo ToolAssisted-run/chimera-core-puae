@@ -283,3 +283,87 @@ the right key on "RightShift"), which fires when the merging is turned off,
 as other cores already do. `package:key-names` accepts a left or right name
 only when the merged one is bound too. Checked on Xvfb: with 1, Return, left
 Shift and Up held, Chimera's window reports Number1, Enter, Shift and Up.
+
+## 2026-10-14: the CD32
+
+**Asked.** The owner: "add CD32 and CDTV support after publishing". Upstream
+PUAE has both (Models CD32, CD32FR and CDTV; discs as `.cue`, `.ccd`,
+`.iso`, `.nrg`, `.mds` and `.chd`). The core had left them out because UAE
+runs their drives and CD audio on threads.
+
+**UAE's threads, one at a time.** The sandbox has one thread, and a run must
+come out the same every time. UAE's drive threads (`akiko.c` for the CD32,
+`cdtv.c`), CD audio (`blkdev_cdimage.c`) and their unpacking each loop on
+"do some work, sleep 10 ms". `waterbox/chimera-threads.c` takes the place of
+UAE's thread layer (patch 0008 makes `threaddep/thread.h` include it and
+`sleep.h` route a sleep to it): each thread is a coroutine with a stack of
+its own (1 MB, mapped as a stack), switched to and from by eight
+instructions of the core's own. A thread runs until it waits (a sleep, a
+semaphore, a read of an empty pipe) and then hands back to the emulation.
+The emulation runs it again at a line of the picture (`devices_hsync`, 64
+us of emulated time a line) once the emulated time it asked to sleep has
+passed, or at once when the emulation itself waits for it. Nothing in this
+depends on the computer's clock, so the native build and the sandbox run
+the same, and a savestate, which is all of the machine's memory, holds the
+threads where they are. Floppy games start no thread: their test results
+did not change (28 passed).
+
+**The disc.** On the CD32 Models the project takes a disc (the slot
+`disc`: a `.cue` with its tracks, or an `.iso`) instead of disks. A disc
+on a floppy Amiga, or a floppy on a CD32, is refused, by name. The sandbox
+has no folders; UAE asked for the current folder to join to a CD's name
+(`getcwd`, a system call the sandbox lacks), so the sandbox's C library is
+given a `getcwd` that answers "" and the join is the bare name.
+
+**The firmware.** Kickstart 3.1 of the CD32 and its extended ROM, under
+Amiga Forever's names, with their SHA-1s.
+
+**The save memory.** The CD32 keeps its games' saves in 1 KB of
+non-volatile memory, which UAE keeps in a file it writes as the machine
+writes. A run never writes a file (every run must start from the same
+bytes), so patch 0009 reads the file, when the project has one, and then
+keeps the memory in memory only. Export Save Data writes it as `cd32.nvr`;
+the slot `savedata` takes it back; a file of another size is refused.
+Measured: started empty, the CD32 writes its header into it as it starts
+(00 56 a9); that file with 16 bytes of the test's own comes back the same.
+
+**The pad was not working.** With the CD32's pad in port 2, which the
+published core already offered on every Model, the core sent the pad's
+buttons under UAE's bits for what the port reads (8 for red), where UAE
+takes a device's own button numbers (0 to 6); and UAE maps a device's
+seven buttons to the pad's only on a port the frontend says holds one. So
+Play, Rewind, Forward, Green and Yellow reached nothing on any Model, and
+red and blue only as a joystick's two buttons. Now the buttons are 0 to 6
+and the port is declared a CD32 pad at start. The test program on a disk
+(`tests/make-amiga-disk.py cd32pad`) reads the pad as games read it, a bit
+a clock of the fire line, and each of the seven buttons is its own bit
+(`amiga:cd32-pad`); with the old code every bit reads 0.
+
+**The CDTV is not offered yet.** It needs its extended ROM, which is not
+here to try; the core's code takes it (Model CDTV, Kickstart 1.3 and
+`amiga-os-130-cdtv-ext.rom`), the package does not offer it until it is
+tried.
+
+Measured, with the owner's CD32 ROMs and Worms (8 tracks, 7 of them CD
+audio):
+
+- The CD32's start-up screen shows an audio CD this test script writes
+  (`tests/make-audio-cd.py`, a tone) in its CD player; red plays it: the
+  sound is one before and 45 different sounds in 75 reports after. Native
+  and sandbox print the same digests; a state saved and loaded every frame,
+  a state moved to a new sandbox, and a rewind while the track plays change
+  nothing.
+- Worms boots from its CD to its first screen that needs the manual (4,000
+  frames): native == sandbox with presses, and a state every frame while it
+  loads changes nothing. An `.iso` of its data track boots too (its intro,
+  timed to CD audio the `.iso` does not have, runs differently).
+- Chimera's window plays a CD32 project of the audio CD, with the two ROMs
+  from its firmware, to the headless runner's memory. On Windows, Chimera's
+  headless runner plays the audio CD and Worms projects to the same memory
+  as on Linux.
+- Test script 37 passed (24 passed and 13 skipped without the owner's files, as on CI); window
+  test 5 passed; Chimera's package checks 18.
+
+Not tried: `.ccd`, `.nrg`, `.mds` (upstream reads them; the slot does not
+offer them), `.chd` (not built), the CD32's video cartridge (FMV), a game
+writing its saves to the save memory.

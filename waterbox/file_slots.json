@@ -12,7 +12,51 @@
     "dms",
     "fdi"
    ],
-   "help": "The game's floppy disks: .adf files (or .adz and .dms, which are packed ones, or .fdi). The first is in the drive when the Amiga is switched on; the others wait their turn, for the games that ask for another disk. Your files are never changed: the Amiga writes to copies of them in its memory."
+   "help": "The game's floppy disks: .adf files (or .adz and .dms, which are packed ones, or .fdi). The first is in the drive when the Amiga is switched on; the others wait their turn, for the games that ask for another disk. Your files are never changed: the Amiga writes to copies of them in its memory.",
+   "exposedWhen": {
+    "not": {
+     "setting": "model",
+     "in": [
+      "CD32",
+      "CD32FR"
+     ]
+    }
+   }
+  },
+  {
+   "id": "disc",
+   "title": "Disc",
+   "min": 1,
+   "max": 1,
+   "formats": [
+    "cue",
+    "iso"
+   ],
+   "exposedWhen": {
+    "setting": "model",
+    "in": [
+     "CD32",
+     "CD32FR"
+    ]
+   },
+   "help": "The game's CD: a .cue sheet with its track files (.bin), or an .iso of a disc that has only data. It is read as it is and never changed."
+  },
+  {
+   "id": "savedata",
+   "title": "Save data",
+   "min": 0,
+   "max": 1,
+   "formats": [
+    "nvr"
+   ],
+   "exposedWhen": {
+    "setting": "model",
+    "in": [
+     "CD32",
+     "CD32FR"
+    ]
+   },
+   "help": "The CD32's save memory (1 KB, where its games keep their saves), as Export Save Data writes it: cd32.nvr. Without one the CD32 starts with its save memory empty."
   }
  ]
 }

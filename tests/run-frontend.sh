@@ -178,6 +178,41 @@ else
 	rm -rf "$fwdir"
 fi
 
+# ---- the CD32: a disc project, its two ROMs from Chimera's firmware
+if [ ! -f "$kicks/amiga-os-310-cd32.rom" ] || [ ! -f "$kicks/amiga-os-310-cd32-ext.rom" ]; then
+	report "window:cd32" SKIP "needs the CD32's Kickstart and extended ROM (amiga-os-310-cd32.rom, amiga-os-310-cd32-ext.rom in AMIGA_KICKSTARTS)"
+else
+	fwdir="$(mktemp -d)"
+	cp "$kicks/amiga-os-310-cd32.rom" "$kicks/amiga-os-310-cd32-ext.rom" "$fwdir/"
+	mkdir -p "$work/tonecd" "$work/cd"
+	python3 "$here/make-audio-cd.py" "$work/tonecd" > /dev/null
+	cp "$work/tonecd/tone.cue" "$work/tonecd/tone.bin" "$work/cd/"
+	python3 "$here/settings-config.py" "$config" "$work/config.cd.ini" '{}' \
+		"{\"amiga-os-310-cd32.rom\": \"$fwdir/amiga-os-310-cd32.rom\", \"amiga-os-310-cd32-ext.rom\": \"$fwdir/amiga-os-310-cd32-ext.rom\"}"
+	# the controls live on a CD32 are not those of the floppy Amiga above
+	mkdir -p "$work/cdprobe"
+	for f in tone.cue tone.bin; do ln -sf "$work/tonecd/$f" "$work/cdprobe/$f"; done
+	for f in amiga-os-310-cd32.rom amiga-os-310-cd32-ext.rom; do ln -sf "$fwdir/$f" "$work/cdprobe/$f"; done
+	printf '{"disc":["tone.cue"]}' > "$work/cdprobe/slots"; printf '{"model":"CD32"}' > "$work/cdprobe/settings"
+	"$runwbx" "$core" "$work/cdprobe" --frames 1 --list-panel > "$work/cd-panel.out" 2> /dev/null
+	cframes=1300
+	fw="firmware=amiga-os-310-cd32.rom=$fwdir/amiga-os-310-cd32.rom"
+	fw2="firmware=amiga-os-310-cd32-ext.rom=$fwdir/amiga-os-310-cd32-ext.rom"
+	python3 "$here/make-project.py" "$package" "$work/cd/cd.chimeraProject" $((cframes + 100)) "panel=$work/cd-panel.out" \
+		model=CD32 port2=cd32pad "$fw" "$fw2" "press=P1 Fire:799:5" -- "disc=$work/cd/tone.cue" > "$work/cd.log" 2>&1
+	"$runner" --project "$work/cd/cd.chimeraProject" "$package" --files "$work/cd" \
+		--firmware "amiga-os-310-cd32.rom=$fwdir/amiga-os-310-cd32.rom" --firmware "amiga-os-310-cd32-ext.rom=$fwdir/amiga-os-310-cd32-ext.rom" \
+		--frames "$cframes" --dump "Chip RAM=$work/cd-engine.ram.bin" > "$work/cd-engine.log" 2>&1
+	if ! run_frontend cd "$work/config.cd.ini" "$cframes" "Chip RAM"; then
+		report "window:cd32" FAIL "Chimera did not finish the run: $(value cd detail) $(tail -2 "$work/cd.log" | tr '\n' ' ' | cut -c1-200)"
+	elif [ "$(value cd frames)" = "$cframes" ] && [ -s "$work/cd-engine.ram.bin" ] && cmp -s "$work/cd-engine.ram.bin" "$work/cd.ram.bin"; then
+		report "window:cd32" PASS "a CD32 project of an audio CD (a .cue and its track) took the CD32's two ROMs from Chimera's firmware, ran $cframes frames in the window with red pressed in the CD player, $(value cd width)x$(value cd height), and left the Chip RAM the headless runner leaves"
+	else
+		report "window:cd32" FAIL "frames $(value cd frames) of $cframes, or the Chip RAM differs from the headless runner's ($(tail -1 "$work/cd-engine.log" | cut -c1-150))"
+	fi
+	rm -rf "${fwdir:?}"
+fi
+
 echo
 echo "$ok passed, $failed failed, $skipped skipped"
 [ "$failed" -eq 0 ]
