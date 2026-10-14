@@ -339,10 +339,15 @@ and the port is declared a CD32 pad at start. The test program on a disk
 a clock of the fire line, and each of the seven buttons is its own bit
 (`amiga:cd32-pad`); with the old code every bit reads 0.
 
-**The CDTV is not offered yet.** It needs its extended ROM, which is not
-here to try; the core's code takes it (Model CDTV, Kickstart 1.3 and
-`amiga-os-130-cdtv-ext.rom`), the package does not offer it until it is
-tried.
+**The CDTV** came the same day, once the owner gave its extended ROM
+(version 2.7; Turrican II's CD was already here). Model CDTV: Kickstart 1.3
+and `amiga-os-130-cdtv-ext.rom`, whose entry names version 2.7's SHA-1 (1.0
+and 2.30 are used too, as files Chimera does not recognise). Port 2 holds a
+joystick by default (the CDTV's controllers were a joystick, a mouse and its
+remote; the CD32's pad stays the CD32's default). Its battery-backed save
+memory, which upstream also writes to a file on every change, is kept in
+memory like the CD32's (patch 0009) and exported as `cdtv.nvr`, 32 KB as
+upstream keeps it.
 
 Measured, with the owner's CD32 ROMs and Worms (8 tracks, 7 of them CD
 audio):
@@ -367,3 +372,25 @@ audio):
 Not tried: `.ccd`, `.nrg`, `.mds` (upstream reads them; the slot does not
 offer them), `.chd` (not built), the CD32's video cartridge (FMV), a game
 writing its saves to the save memory.
+
+## 2026-10-14: the CDTV, measured
+
+With the owner's Kickstart 1.3 and CDTV extended ROM 2.7:
+
+- The CDTV's start-up shows the test script's audio CD in its CD player;
+  the joystick's fire plays the track (1 sound before, 44 different sounds
+  in 75 reports after). Native == sandbox, with a state every frame and in a
+  new sandbox. The save memory: started empty, the CDTV writes its header
+  ("BK"); that file with 16 bytes of the test's own comes back the same. On
+  Windows, Chimera's headless runner plays the CD project to the same
+  memory as on Linux.
+- Turrican II (Germany) does not start. The CDTV shows its start-up
+  animation, reads sectors 16 to 255 of the disc in steps of 16, asks the
+  drive for its status, and restarts (every 2,600 frames or so). The disc
+  is ISO 9660 with its CDTV.TM. A native build with upstream's own threads
+  (`CHIMERA_REAL_THREADS`, docs/BUILDING.md) restarts at the same frames, so
+  it is not the core's threads; neither upstream's Delayed Insert nor its
+  Turbo CD speed nor Kickstart 2.04 changes it. Not known: whether the
+  extended ROM 1.0, which upstream names first, starts it.
+- Test script 40 passed (24 passed and 16 skipped without the owner's
+  files); window test 5 passed; Chimera's package checks 18.

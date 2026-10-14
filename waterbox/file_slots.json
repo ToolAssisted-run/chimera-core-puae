@@ -18,7 +18,8 @@
      "setting": "model",
      "in": [
       "CD32",
-      "CD32FR"
+      "CD32FR",
+      "CDTV"
      ]
     }
    }
@@ -36,7 +37,8 @@
     "setting": "model",
     "in": [
      "CD32",
-     "CD32FR"
+     "CD32FR",
+     "CDTV"
     ]
    },
    "help": "The game's CD: a .cue sheet with its track files (.bin), or an .iso of a disc that has only data. It is read as it is and never changed."
@@ -53,10 +55,11 @@
     "setting": "model",
     "in": [
      "CD32",
-     "CD32FR"
+     "CD32FR",
+     "CDTV"
     ]
    },
-   "help": "The CD32's save memory (1 KB, where its games keep their saves), as Export Save Data writes it: cd32.nvr. Without one the CD32 starts with its save memory empty."
+   "help": "The save memory of the CD32 (1 KB, where its games keep their saves) or of the CDTV (its battery-backed memory, kept as a file of 32 KB), as Export Save Data writes it: cd32.nvr or cdtv.nvr. Without one the machine starts with its save memory empty."
   }
  ]
 }

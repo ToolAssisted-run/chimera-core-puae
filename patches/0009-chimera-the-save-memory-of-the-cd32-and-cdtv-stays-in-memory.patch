@@ -1,0 +1,102 @@
+diff --git a/sources/src/akiko.c b/sources/src/akiko.c
+index 0f99f306..03491d51 100644
+--- a/sources/src/akiko.c
++++ b/sources/src/akiko.c
+@@ -224,6 +224,19 @@ static void nvram_read (void)
+ 	}
+ 	TCHAR path[MAX_DPATH];
+ 	cfgfile_resolve_path_out_load(currprefs.flashfile, path, MAX_DPATH, PATH_ROM);
++#ifdef CHIMERA_CORE
++	/* The save memory is read from the project's file, if there is one, and
++	   then kept in memory only: a run never writes a file, so every run
++	   starts from the same bytes, and Export Save Data takes it out
++	   (chimera_cd32_nvram). */
++	if (path[0] && (cd32_flashfile = zfile_fopen (path, _T("rb"), ZFD_NORMAL))) {
++		size_t size = zfile_fread(cd32_nvram, 1, currprefs.cs_cd32nvram_size, cd32_flashfile);
++		if (size == currprefs.cs_cd32nvram_size && maxlen > currprefs.cs_cd32nvram_size)
++			zfile_fread(cubo_nvram, 1, maxlen - currprefs.cs_cd32nvram_size, cd32_flashfile);
++		zfile_fclose(cd32_flashfile);
++		cd32_flashfile = NULL;
++	}
++#else
+ 	cd32_flashfile = zfile_fopen (path, _T("rb+"), ZFD_NORMAL);
+ 	if (!cd32_flashfile)
+ 		cd32_flashfile = zfile_fopen (path, _T("wb"), 0);
+@@ -234,9 +247,19 @@ static void nvram_read (void)
+ 		if (size < maxlen)
+ 			zfile_fwrite(cd32_nvram + size, 1, maxlen - size, cd32_flashfile);
+ 	}
++#endif
+ 	cd32_eeprom = eeprom_new(cd32_nvram, currprefs.cs_cd32nvram_size, cd32_flashfile);
+ }
+ 
++#ifdef CHIMERA_CORE
++/* the CD32's save memory as it is now, for Export Save Data */
++uae_u8 *chimera_cd32_nvram (int *size)
++{
++	*size = cd32_nvram && currprefs.cs_cd32nvram ? currprefs.cs_cd32nvram_size : 0;
++	return cd32_nvram;
++}
++#endif
++
+ static void akiko_nvram_write (int offset, uae_u32 v)
+ {
+ 	switch (offset)
+diff --git a/sources/src/cdtv.c b/sources/src/cdtv.c
+index 63db7a26..aff669e3 100644
+--- a/sources/src/cdtv.c
++++ b/sources/src/cdtv.c
+@@ -1579,6 +1579,9 @@ static void cdtv_savecardmem (uae_u8 *p, int size)
+ 
+ 	if (!size)
+ 		return;
++#ifdef CHIMERA_CORE
++	return;  /* a run never writes a file: the memory stays in memory */
++#endif
+ 	cfgfile_resolve_path_out_load(currprefs.flashfile, flashfilepath, MAX_DPATH, PATH_ROM);
+ 	f = zfile_fopen (flashfilepath, _T("rb+"), ZFD_NORMAL);
+ 	if (!f)
+@@ -1595,6 +1598,17 @@ static void cdtv_battram_reset (void)
+ 
+ 	memset (cdtv_battram, 0, CDTV_NVRAM_SIZE);
+ 	cfgfile_resolve_path_out_load(currprefs.flashfile, flashfilepath, MAX_DPATH, PATH_ROM);
++#ifdef CHIMERA_CORE
++	/* The save memory is read from the project's file, if there is one, and
++	   then kept in memory only: a run never writes a file, so every run
++	   starts from the same bytes, and Export Save Data takes it out
++	   (chimera_cdtv_nvram). */
++	if (flashfilepath[0] && (f = zfile_fopen (flashfilepath, _T("rb"), ZFD_NORMAL))) {
++		zfile_fread (cdtv_battram, 1, CDTV_NVRAM_SIZE, f);
++		zfile_fclose (f);
++	}
++	return;
++#endif
+ 	f = zfile_fopen (flashfilepath, _T("rb+"), ZFD_NORMAL);
+ 	if (!f) {
+ 		f = zfile_fopen (flashfilepath, _T("wb"), 0);
+@@ -1621,6 +1635,9 @@ void cdtv_battram_write (int addr, int v)
+ 	if (cdtv_battram[offset] == v)
+ 		return;
+ 	cdtv_battram[offset] = v;
++#ifdef CHIMERA_CORE
++	return;
++#endif
+ 	f = zfile_fopen (flashfilepath, _T("rb+"), ZFD_NORMAL);
+ 	if (!f)
+ 		return;
+@@ -1629,6 +1646,15 @@ void cdtv_battram_write (int addr, int v)
+ 	zfile_fclose (f);
+ }
+ 
++#ifdef CHIMERA_CORE
++/* the CDTV's save memory as it is now, for Export Save Data */
++uae_u8 *chimera_cdtv_nvram (int *size)
++{
++	*size = CDTV_NVRAM_SIZE;
++	return cdtv_battram;
++}
++#endif
++
+ uae_u8 cdtv_battram_read (int addr)
+ {
+ 	uae_u8 v;

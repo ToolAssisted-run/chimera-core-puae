@@ -1,12 +1,12 @@
 diff --git a/retrodep/threaddep/thread.c b/retrodep/threaddep/thread.c
-index 1839f7b2..af70511f 100644
+index 1839f7b2..d9d1d2c6 100644
 --- a/retrodep/threaddep/thread.c
 +++ b/retrodep/threaddep/thread.c
 @@ -10,6 +10,8 @@
    * Idea stolen from SDL.
    */
  
-+#ifndef CHIMERA_CORE
++#if !defined(CHIMERA_CORE) || defined(CHIMERA_REAL_THREADS)
 +
  #include "sysconfig.h"
  #include "sysdeps.h"
@@ -18,36 +18,37 @@ index 1839f7b2..af70511f 100644
 +
 +#endif /* CHIMERA_CORE */
 diff --git a/retrodep/threaddep/thread.h b/retrodep/threaddep/thread.h
-index a3777bf0..90375177 100644
+index a3777bf0..8802fad6 100644
 --- a/retrodep/threaddep/thread.h
 +++ b/retrodep/threaddep/thread.h
-@@ -7,6 +7,11 @@
+@@ -7,6 +7,12 @@
    * Copyright 2004 Richard Drummond
    */
  
-+#ifdef CHIMERA_CORE
-+/* The core runs these threads one at a time (waterbox/chimera-threads.h). */
++#if defined(CHIMERA_CORE) && !defined(CHIMERA_REAL_THREADS)
++/* The core runs these threads one at a time (waterbox/chimera-threads.h).
++   CHIMERA_REAL_THREADS (a reference build for the tests) keeps upstream's. */
 +#include "chimera-threads.h"
 +#else
 +
  #ifdef _WIN32
  #define WIN32_LEAN_AND_MEAN
  typedef HANDLE uae_sem_t;
-@@ -272,3 +277,5 @@ STATIC_INLINE void uae_set_thread_priority (uae_thread_id *tid, int pri)
+@@ -272,3 +278,5 @@ STATIC_INLINE void uae_set_thread_priority (uae_thread_id *tid, int pri)
  }
  
  #endif
 +
 +#endif /* CHIMERA_CORE */
 diff --git a/sources/src/devices.c b/sources/src/devices.c
-index 962d860b..7220c1fe 100644
+index 962d860b..6dab459e 100644
 --- a/sources/src/devices.c
 +++ b/sources/src/devices.c
 @@ -279,6 +279,10 @@ void devices_hsync(void)
  #endif
  
  	execute_device_items(device_hsyncs, device_hsync_cnt);
-+#ifdef CHIMERA_CORE
++#if defined(CHIMERA_CORE) && !defined(CHIMERA_REAL_THREADS)
 +	/* the threads whose emulated time has come run */
 +	chimera_threads_hsync();
 +#endif
@@ -55,7 +56,7 @@ index 962d860b..7220c1fe 100644
  
  void devices_rethink_all(void func(void))
 diff --git a/sources/src/include/sleep.h b/sources/src/include/sleep.h
-index 9f73acc8..969ece50 100644
+index 9f73acc8..75715650 100644
 --- a/sources/src/include/sleep.h
 +++ b/sources/src/include/sleep.h
 @@ -22,7 +22,11 @@
@@ -63,7 +64,7 @@ index 9f73acc8..969ece50 100644
  #endif
  
 -#ifdef __LIBRETRO__
-+#ifdef CHIMERA_CORE
++#if defined(CHIMERA_CORE) && !defined(CHIMERA_REAL_THREADS)
 +/* A thread's sleep is emulated time (waterbox/chimera-threads.h). */
 +void chimera_threads_sleep(int ms);
 +#define uae_msleep chimera_threads_sleep

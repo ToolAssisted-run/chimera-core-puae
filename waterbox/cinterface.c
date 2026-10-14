@@ -152,7 +152,7 @@ static int port_setting(const char *name, int otherwise)
 static char g_disks[MAX_DISKS][256];
 static int g_diskCount, g_selected;
 /* the CD32 and the CDTV take a disc, not floppy disks */
-static int g_isCd;
+static int g_isCd, g_isCdtv;
 static char g_nvram[256];   /* the save memory the project brings, or "" */
 
 static int button_active(int i)
@@ -414,7 +414,8 @@ ECL_EXPORT int Init(void)
 	char model[32] = "A500", kick[32] = "auto";
 	wbx_setting_str("model", model, sizeof model);
 	wbx_setting_str("kickstart", kick, sizeof kick);
-	g_isCd = !strcmp(model, "CD32") || !strcmp(model, "CD32FR") || !strcmp(model, "CDTV");
+	g_isCdtv = !strcmp(model, "CDTV");
+	g_isCd = !strcmp(model, "CD32") || !strcmp(model, "CD32FR") || g_isCdtv;
 	const char *slot = g_isCd ? "disc" : "disk";
 	g_diskCount = wbx_slot_count(slot);
 	if (g_diskCount > MAX_DISKS) g_diskCount = MAX_DISKS;
@@ -424,21 +425,24 @@ ECL_EXPORT int Init(void)
 	g_nvram[0] = '\0';
 	if (wbx_slot_count("savedata") > 0)
 	{
-		/* the CD32's save memory, as Export Save Data writes it: 1 KB. Any
-		 * other file would not be read, so it is refused */
+		/* the save memory, as Export Save Data writes it: the CD32's 1 KB,
+		 * the CDTV's 32 KB (as upstream keeps it). Any other file would not
+		 * be read, so it is refused */
 		wbx_slot_name("savedata", 0, g_nvram, sizeof g_nvram);
 		FILE *f = fopen(g_nvram, "rb");
 		long size = -1;
 		if (f && fseek(f, 0, SEEK_END) == 0) size = ftell(f);
 		if (f) fclose(f);
-		if (strcmp(model, "CD32") && strcmp(model, "CD32FR"))
+		const int cdtv = !strcmp(model, "CDTV");
+		const long want = cdtv ? 32768 : 1024;
+		if (!g_isCd)
 		{
-			snprintf(g_loadError, sizeof g_loadError, "save data (%s) is the CD32's save memory, and the %s has none", g_nvram, model);
+			snprintf(g_loadError, sizeof g_loadError, "save data (%s) is a CD32's or CDTV's save memory, and the %s has none", g_nvram, model);
 			return 0;
 		}
-		if (size != 1024)
+		if (size != want)
 		{
-			snprintf(g_loadError, sizeof g_loadError, "%s is not the CD32's save memory, which is 1024 bytes (it has %ld)", g_nvram, size);
+			snprintf(g_loadError, sizeof g_loadError, "%s is not the %s's save memory, which is %ld bytes (it has %ld)", g_nvram, cdtv ? "CDTV" : "CD32", want, size);
 			return 0;
 		}
 	}
@@ -468,7 +472,7 @@ ECL_EXPORT int Init(void)
 			disc |= !strcasecmp(dot, kDisc[i]);
 		if (disc != g_isCd)
 		{
-			snprintf(g_loadError, sizeof g_loadError, disc ? "%s is a CD: set Model to CD32" : "%s is not a CD image, and the %s takes a CD", g_disks[0], model);
+			snprintf(g_loadError, sizeof g_loadError, disc ? "%s is a CD: set Model to CD32 or CDTV" : "%s is not a CD image, and the %s takes a CD", g_disks[0], model);
 			return 0;
 		}
 	}
@@ -480,7 +484,10 @@ ECL_EXPORT int Init(void)
 	}
 	g_frameCount = 0;
 	g_port1 = port_setting("port1", kMouse);
-	g_port2 = port_setting("port2", g_isCd ? kPad : kJoystick);   /* the package says the same */
+	/* the CD32's own pad on the CD32, a joystick elsewhere (the CDTV's
+	 * controllers were a joystick, a mouse and its remote): the package says
+	 * the same */
+	g_port2 = port_setting("port2", g_isCd && strcmp(model, "CDTV") ? kPad : kJoystick);
 	if (g_port1 == kPad) g_port1 = kJoystick;   /* the CD32's pad goes in port 2 only */
 	for (int k = 0; k < KEY_COUNT; k++)
 		snprintf(g_keyNames[k], sizeof g_keyNames[k], "Key %s", kKeys[k].name);
@@ -607,8 +614,10 @@ extern int chimera_disk_changed(int i);
 static int g_saveIndex[32], g_saveCount;
 static char g_saveNames[32][MAX_DPATH + 8];
 
-/* On the CD32 it is the save memory, as cd32.nvr, once anything is in it */
+/* On the CD32 and the CDTV it is the save memory, as cd32.nvr or cdtv.nvr,
+ * once anything is in it */
 extern uae_u8 *chimera_cd32_nvram(int *size);
+extern uae_u8 *chimera_cdtv_nvram(int *size);
 static const uint8_t *g_nvramBytes;
 static int g_nvramSize;
 
@@ -617,7 +626,7 @@ ECL_EXPORT int32_t GetSaveDataFileCount(void)
 	g_saveCount = 0;
 	if (g_isCd)
 	{
-		g_nvramBytes = chimera_cd32_nvram(&g_nvramSize);
+		g_nvramBytes = g_isCdtv ? chimera_cdtv_nvram(&g_nvramSize) : chimera_cd32_nvram(&g_nvramSize);
 		for (int i = 0; g_nvramBytes && i < g_nvramSize; i++)
 			if (g_nvramBytes[i]) return 1;
 		return 0;
@@ -641,7 +650,7 @@ ECL_EXPORT int32_t GetSaveDataFileCount(void)
 }
 ECL_EXPORT const char *GetSaveDataFileName(int32_t i)
 {
-	if (g_isCd) return i == 0 ? "cd32.nvr" : "";
+	if (g_isCd) return i == 0 ? (g_isCdtv ? "cdtv.nvr" : "cd32.nvr") : "";
 	return i >= 0 && i < g_saveCount ? g_saveNames[i] : "";
 }
 ECL_EXPORT int64_t GetSaveDataFileSize(int32_t i)

@@ -1,8 +1,8 @@
 # chimera-core-puae
 
 A core for [Chimera](https://github.com/ToolAssisted-run/chimera), the
-frontend for tool-assisted speedruns, for the **Commodore Amiga** and the
-**Amiga CD32**. It is
+frontend for tool-assisted speedruns, for the **Commodore Amiga**, the
+**Amiga CD32** and the **Commodore CDTV**. It is
 built on [PUAE](https://github.com/libretro/libretro-uae), the libretro port
 of the Amiga emulator UAE, and produces one file, `puae.chimeraCore`, that
 goes in Chimera's `Cores` folder.
@@ -16,23 +16,26 @@ goes in Chimera's `Cores` folder.
 - The CD32 runs games from CD, with CD audio and its save memory. Tried:
   Worms (to its first screen that needs the manual), and the CD32's own CD
   player with an audio CD.
+- The CDTV starts, plays an audio CD in its own CD player and keeps its save
+  memory. Its one game tried, Turrican II, does not start: the CDTV restarts
+  after its start-up screen, again and again, in upstream's PUAE too.
 - On Windows, Chimera's headless runner plays projects of floppy and CD32
-  games to the same memory as on Linux. Chimera's window was tried on Linux
+  games and CDTV projects to the same memory as on Linux. Chimera's window was tried on Linux
   only.
-- Not there: the CDTV (its extended ROM has not been tried yet), hard disks
-  and WHDLoad, a second floppy drive, IPF disk images, the CD32's video
+- Not there: hard disks and WHDLoad, a second floppy drive, IPF disk images, the CD32's video
   cartridge (FMV), CHD disc images.
 
 ## What you bring
 
 - The game's disks: `.adf` files (or `.adz`, `.dms`, `.fdi`). A project
   holds up to 20; the first is in the drive at the start.
-- For the CD32: the game's CD, a `.cue` with its track files (or an `.iso`
-  of a CD that has only data).
+- For the CD32 and the CDTV: the game's CD, a `.cue` with its track files
+  (or an `.iso` of a CD that has only data).
 - The Kickstart ROM of the model, as Chimera's Firmware page asks for it:
   `amiga-os-130.rom` (Kickstart 1.3) for the A500, `amiga-os-310-a1200.rom`
   for the A1200, `amiga-os-310-cd32.rom` and `amiga-os-310-cd32-ext.rom`
-  for the CD32, and so on. With Kickstart set to `aros`, nothing is needed:
+  for the CD32, `amiga-os-130.rom` and the CDTV's extended ROM
+  `amiga-os-130-cdtv-ext.rom` for the CDTV, and so on. With Kickstart set to `aros`, nothing is needed:
   PUAE carries AROS's free replacement Kickstart, which some games run with.
 
 ## Buttons and settings
@@ -46,16 +49,17 @@ goes in Chimera's `Cores` folder.
 - **The drive**: Previous Disk and Next Disk choose a disk; Eject Disk
   takes the disk out while it is held and puts the chosen one in.
 - **Settings**: Model (A500, A500+, A600, A1200, A2000, A4000, and the
-  smaller versions of some; CD32, and CD32FR with 8 MB of fast memory),
+  smaller versions of some; CD32, and CD32FR with 8 MB of fast memory;
+  CDTV),
   Kickstart, Video Standard (PAL or NTSC),
   Starting Clock (the battery-backed clock), and what is in each port. All
   of them are part of the machine, so a movie needs the same values.
 
 The Amiga writes to copies of its disks in memory, never to your files, and
 a savestate holds them. Emulator > Export Save Data writes each disk the
-Amiga changed, as an `.adf`. On the CD32 it writes the save memory, where
-its games keep their saves, as `cd32.nvr`, which a project's Save data slot
-takes back.
+Amiga changed, as an `.adf`. On the CD32 and the CDTV it writes the save
+memory, where their games keep their saves, as `cd32.nvr` or `cdtv.nvr`,
+which a project's Save data slot takes back.
 
 RAM Watch and RAM Search read the Amiga's memory as Chip RAM, Slow RAM and
 Fast RAM.

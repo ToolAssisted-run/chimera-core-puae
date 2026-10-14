@@ -19,7 +19,7 @@ series='
 0006-chimera-config-names-are-set|sources/src/misc.c
 0007-chimera-the-pc-mouse-stub-returns-false|sources/src/x86.c
 0008-chimera-threads-run-one-at-a-time|retrodep/threaddep/thread.h retrodep/threaddep/thread.c sources/src/include/sleep.h sources/src/devices.c
-0009-chimera-the-cd32-save-memory-stays-in-memory|sources/src/akiko.c
+0009-chimera-the-save-memory-of-the-cd32-and-cdtv-stays-in-memory|sources/src/akiko.c sources/src/cdtv.c
 '
 
 # a patch that did not change keeps its file (and its time: the test script

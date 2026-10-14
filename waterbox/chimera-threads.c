@@ -18,6 +18,9 @@
 #include "sysdeps.h"
 #include "threaddep/thread.h"
 
+/* A reference build for the tests keeps upstream's real threads instead */
+#ifndef CHIMERA_REAL_THREADS
+
 #define MAX_THREADS 64
 #define STACK_SIZE (1024 * 1024)
 
@@ -315,3 +318,5 @@ void uae_set_thread_priority(uae_thread_id *tid, int pri)
 	(void)tid;
 	(void)pri;
 }
+
+#endif /* CHIMERA_REAL_THREADS */

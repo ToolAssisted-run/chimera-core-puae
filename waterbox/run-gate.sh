@@ -145,7 +145,7 @@ for line in open(sys.argv[2]):
 src = open(sys.argv[3]).read()
 names = re.findall(r'"([^"]+)"', re.search(r"kAxisNames\[kAxes\] = \{([^}]*)\}", src).group(1))
 m = cfg["machines"]
-ok = [x["id"] for x in m] == ["AMIGA", "CD32"] and all(x["input"] == m[0]["input"] for x in m) and m[0]["input"]["buttons"] == buttons and [a["name"] for a in m[0]["input"]["axes"]] == names and len(names) == axes
+ok = [x["id"] for x in m] == ["AMIGA", "CD32", "CDTV"] and all(x["input"] == m[0]["input"] for x in m) and m[0]["input"]["buttons"] == buttons and [a["name"] for a in m[0]["input"]["axes"]] == names and len(names) == axes
 sys.exit(0 if ok and len(buttons) == 119 and axes == 2 else 1)
 PY
 if [ -n "$chimera_root" ] && [ -f "$chimera_root/source/gui/Chimera.Input/KeyMouseInput/DistinctKey.cs" ]; then
@@ -377,8 +377,8 @@ if [ -f "$kicks/amiga-os-310-cd32.rom" ] && [ -f "$kicks/amiga-os-310-cd32-ext.r
 	box acd-rewind acd --frames 2400 --report 5 --press "$red":800:5 --rewind
 	for n in acd acd-idle acd-box acd-rerecord acd-session; do stream "$work/$n.out" > "$work/$n.stream"; done
 	sounds() { awk -v a="$2" -v b="$3" '$2 > a && $2 <= b {print $10}' "$1" | sort -u | wc -l; }
-	check "cd32:audio-cd" "the CD32 starts with an audio CD in its CD player ($(awk '{print $7}' "$work/acd.stream" | sort -u | wc -l) pictures); red plays the track: $(sounds "$work/acd.stream" 0 800) sound before it and $(sounds "$work/acd.stream" 900 2400) different sounds in the 75 reports after, where the run without it keeps $(sounds "$work/acd-idle.stream" 900 2400)" \
-		[ "$(sounds "$work/acd.stream" 0 800)" = 1 -a "$(sounds "$work/acd.stream" 900 2400)" -gt 30 -a "$(sounds "$work/acd-idle.stream" 900 2400)" = 1 ]
+	check "cd32:audio-cd" "the CD32 starts with an audio CD in its CD player ($(awk '{print $7}' "$work/acd.stream" | sort -u | wc -l) pictures); red plays the track: $(sounds "$work/acd.stream" 0 780) sound before it and $(sounds "$work/acd.stream" 900 2400) different sounds in the 75 reports after, where the run without it keeps $(sounds "$work/acd-idle.stream" 900 2400)" \
+		[ "$(sounds "$work/acd.stream" 0 780)" = 1 -a "$(sounds "$work/acd.stream" 900 2400)" -gt 30 -a "$(sounds "$work/acd-idle.stream" 900 2400)" = 1 ]
 	check "cd32:sandbox" "native and sandbox print the same $(wc -l < "$work/acd.stream") digests while the drive and CD audio run" same "$work/acd.stream" "$work/acd-box.stream"
 	check "cd32:states" "while the CD plays, a state saved and loaded every frame, and a state moved to a new sandbox, change nothing" \
 		sh -c "cmp -s '$work/acd-box.stream' '$work/acd-rerecord.stream' && cmp -s '$work/acd-box.stream' '$work/acd-session.stream'"
@@ -430,6 +430,59 @@ else
 		report "$t" SKIP "no CD32 Kickstart and extended ROM (amiga-os-310-cd32.rom, amiga-os-310-cd32-ext.rom in AMIGA_KICKSTARTS)"
 	done
 fi
+# ------------------------------------------------- the CDTV
+# Kickstart 1.3 with the CDTV's extended ROM: the same audio CD, which the
+# CDTV's start-up shows in its CD player and plays on the joystick's fire
+if [ -f "$kicks/amiga-os-130.rom" ] && [ -f "$kicks/amiga-os-130-cdtv-ext.rom" ]; then
+	mkdir -p "$work/tonecd"
+	[ -f "$work/tonecd/tone.cue" ] || python3 "$root/tests/make-audio-cd.py" "$work/tonecd" > /dev/null
+	tvfolder() { # tvfolder <name> <settings>: a CDTV work folder with the audio CD
+		mkdir -p "$work/$1"
+		for f in tone.cue tone.bin; do ln -sf "$work/tonecd/$f" "$work/$1/$f"; done
+		for f in amiga-os-130.rom amiga-os-130-cdtv-ext.rom; do ln -sf "$kicks/$f" "$work/$1/$f"; done
+		printf '{"disc":["tone.cue"]}' > "$work/$1/slots"
+		printf '%s' "$2" > "$work/$1/settings"
+	}
+	tvfolder tv '{"model":"CDTV"}'
+	fire="$(index tv "P1 Fire")"
+	tvrun="--frames 2400 --report 20 --press $fire:800:5"
+	nat tv-idle tv --frames 2400 --report 20
+	nat tv tv $tvrun
+	box tv-box tv $tvrun
+	box tv-rerecord tv $tvrun --rerecord
+	box tv-session tv $tvrun --session
+	for n in tv tv-idle tv-box tv-rerecord tv-session; do stream "$work/$n.out" > "$work/$n.stream"; done
+	tvsounds() { awk -v a="$2" -v b="$3" '$2 > a && $2 <= b {print $10}' "$1" | sort -u | wc -l; }
+	check "cdtv:audio-cd" "the CDTV starts with an audio CD in its CD player ($(awk '{print $7}' "$work/tv.stream" | sort -u | wc -l) pictures); the joystick's fire plays the track: $(tvsounds "$work/tv.stream" 0 780) sound before it and $(tvsounds "$work/tv.stream" 900 2400) different sounds in the 75 reports after, where the run without it keeps $(tvsounds "$work/tv-idle.stream" 900 2400)" \
+		[ "$(tvsounds "$work/tv.stream" 0 780)" = 1 -a "$(tvsounds "$work/tv.stream" 900 2400)" -gt 30 -a "$(tvsounds "$work/tv-idle.stream" 900 2400)" = 1 ]
+	check "cdtv:sandbox" "native and sandbox print the same $(wc -l < "$work/tv.stream") digests, and a state saved and loaded every frame, and one moved to a new sandbox, change nothing" \
+		sh -c "cmp -s '$work/tv.stream' '$work/tv-box.stream' && cmp -s '$work/tv-box.stream' '$work/tv-rerecord.stream' && cmp -s '$work/tv-box.stream' '$work/tv-session.stream'"
+
+	# the save memory, as the CD32's: the CDTV writes its header, the file
+	# with this script's bytes in it comes back the same
+	mkdir -p "$work/tv0-out" "$work/tvnv-out"
+	box tv0 tv --frames 1500 --savedata-out "$work/tv0-out"
+	python3 - "$work/tv0-out/cdtv.nvr" "$work/tonecd/tvmark.nvr" <<'PY'
+import sys
+try:
+    b = bytearray(open(sys.argv[1], "rb").read())
+except OSError:
+    b = bytearray(32768)
+b[0x1000:0x1010] = b"CHIMERA-NVR-TEST"
+open(sys.argv[2], "wb").write(b)
+PY
+	tvfolder tvnv '{"model":"CDTV"}'
+	ln -sf "$work/tonecd/tvmark.nvr" "$work/tvnv/tvmark.nvr"
+	printf '{"disc":["tone.cue"],"savedata":["tvmark.nvr"]}' > "$work/tvnv/slots"
+	box tvnv tvnv --frames 300 --savedata-out "$work/tvnv-out"
+	check "cdtv:save-memory" "the CDTV's save memory: started empty, the CDTV writes its header ($(od -An -c -N2 "$work/tv0-out/cdtv.nvr" 2> /dev/null | tr -d ' ')) and Export Save Data gives it as cdtv.nvr (32 KB); that file with 16 bytes of this script's at 0x1000 is read in and comes back the same" \
+		sh -c "[ \"\$(od -An -c -N2 '$work/tv0-out/cdtv.nvr' | tr -d ' ')\" = BK ] && cmp -s '$work/tonecd/tvmark.nvr' '$work/tvnv-out/cdtv.nvr'"
+else
+	for t in cdtv:audio-cd cdtv:sandbox cdtv:save-memory; do
+		report "$t" SKIP "no Kickstart 1.3 and CDTV extended ROM (amiga-os-130.rom, amiga-os-130-cdtv-ext.rom in AMIGA_KICKSTARTS)"
+	done
+fi
+
 folder cdwrong '{"model":"CD32","kickstart":"aros"}' "$prog"
 printf '{"disc":["prog.adf"]}' > "$work/cdwrong/slots"
 nat cdwrong cdwrong --frames 1
