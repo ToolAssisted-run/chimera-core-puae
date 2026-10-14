@@ -14,6 +14,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
+#include <sys/time.h>
+#include <time.h>
 
 #include <emulibc.h>
 #include <waterbox_settings.h>
@@ -218,9 +220,51 @@ static void give_controls(void)
 	memcpy(g_was, g_held, sizeof g_was);
 }
 
+/* ---- the clock ----------------------------------------------------------
+ * UAE reads the time for the battery-backed clock of the A500+, A600, A1200
+ * and A4000 (rtc.c, cia.c) and for the dates it writes. The time it is given
+ * is the project's Starting Clock plus the time the machine has run, counted
+ * in frames: the same in every run and in every build. These definitions
+ * take the place of the C library's, for UAE and for anything else in the
+ * core; localtime() is UTC, as the sandbox's C library has it. */
+static int64_t g_startTime = 946684800;   /* the first of January 2000 */
+static uint64_t g_frameCount;
+static double g_fps = 50.0;
+
+static int64_t emulated_usec(void)
+{
+	return (int64_t)((double)g_frameCount * 1000000.0 / g_fps);
+}
+time_t time(time_t *t)
+{
+	time_t v = (time_t)(g_startTime + emulated_usec() / 1000000);
+	if (t) *t = v;
+	return v;
+}
+int gettimeofday(struct timeval *restrict tv, void *restrict tz)
+{
+	(void)tz;
+	int64_t us = emulated_usec();
+	if (tv)
+	{
+		tv->tv_sec = (time_t)(g_startTime + us / 1000000);
+		tv->tv_usec = (suseconds_t)(us % 1000000);
+	}
+	return 0;
+}
+int clock_gettime(clockid_t id, struct timespec *ts)
+{
+	(void)id;
+	int64_t us = emulated_usec();
+	ts->tv_sec = (time_t)(g_startTime + us / 1000000);
+	ts->tv_nsec = (long)(us % 1000000) * 1000;
+	return 0;
+}
+struct tm *localtime(const time_t *t) { return gmtime(t); }
+struct tm *localtime_r(const time_t *restrict t, struct tm *restrict out) { return gmtime_r(t, out); }
+
 /* ---- the callbacks PUAE calls ------------------------------------------- */
 static struct retro_keyboard_callback g_keyboard;
-static double g_fps = 50.0;
 
 static void log_printf(enum retro_log_level level, const char *fmt, ...)
 {
@@ -268,14 +312,15 @@ static bool environment(unsigned cmd, void *data)
 		return true;
 	/* The sandbox's files have no folders: a file is found by its bare name.
 	 * So the folder the Kickstarts are looked for in is "", which PUAE joins
-	 * to a name as the name alone. (The save folder is "." because PUAE
-	 * looks at the last character of it; nothing is saved there.) */
+	 * to a name as the name alone. (The save folder is a name of its own,
+	 * at least two characters long, because PUAE looks at the last two
+	 * characters of it; nothing is saved there.) */
 	case RETRO_ENVIRONMENT_GET_SYSTEM_DIRECTORY:
 	case RETRO_ENVIRONMENT_GET_CONTENT_DIRECTORY:
 		*(const char **)data = "";
 		return true;
 	case RETRO_ENVIRONMENT_GET_SAVE_DIRECTORY:
-		*(const char **)data = ".";
+		*(const char **)data = "saves";
 		return true;
 	case RETRO_ENVIRONMENT_SET_PIXEL_FORMAT:
 		return *(const enum retro_pixel_format *)data == RETRO_PIXEL_FORMAT_XRGB8888;
@@ -375,11 +420,41 @@ ECL_EXPORT int Init(void)
 	}
 	g_selected = 0;
 
+	{
+		char v[32];
+		if (wbx_setting_str("initialTime", v, sizeof v) > 0) g_startTime = strtoll(v, NULL, 10);
+	}
+	g_frameCount = 0;
 	g_port1 = port_setting("port1", kMouse);
 	g_port2 = port_setting("port2", kJoystick);
 	if (g_port1 == kPad) g_port1 = kJoystick;   /* the CD32's pad goes in port 2 only */
 	for (int k = 0; k < KEY_COUNT; k++)
 		snprintf(g_keyNames[k], sizeof g_keyNames[k], "Key %s", kKeys[k].name);
+
+	/* the Model's Kickstart, unless it is AROS's: refused by its name when
+	 * it is not there, which PUAE would otherwise start without */
+	{
+		static const struct { const char *model, *rom; } kRoms[] = {
+			{ "A500", "amiga-os-130.rom" }, { "A500OG", "amiga-os-130.rom" }, { "A2000OG", "amiga-os-130.rom" },
+			{ "A500PLUS", "amiga-os-204.rom" }, { "A600", "amiga-os-310-a600.rom" }, { "A2000", "amiga-os-310-a600.rom" },
+			{ "A1200OG", "amiga-os-310-a1200.rom" }, { "A1200", "amiga-os-310-a1200.rom" },
+			{ "A4030", "amiga-os-310-a4000.rom" }, { "A4040", "amiga-os-310-a4000.rom" },
+		};
+		char model[32] = "A500", kick[32] = "auto";
+		wbx_setting_str("model", model, sizeof model);
+		wbx_setting_str("kickstart", kick, sizeof kick);
+		for (size_t i = 0; i < sizeof kRoms / sizeof kRoms[0]; i++)
+		{
+			if (strcmp(kRoms[i].model, model) || strcmp(kick, "auto")) continue;
+			FILE *f = fopen(kRoms[i].rom, "rb");
+			if (!f)
+			{
+				snprintf(g_loadError, sizeof g_loadError, "the %s's Kickstart ROM is missing: %s (or set Kickstart to 'aros')", model, kRoms[i].rom);
+				return 0;
+			}
+			fclose(f);
+		}
+	}
 
 	retro_set_environment(environment);
 	retro_set_video_refresh(video_refresh);
@@ -434,6 +509,7 @@ ECL_EXPORT void FrameAdvance(uint64_t packed)
 	give_controls();
 	chimera_input_reads = 0;
 	retro_run();
+	g_frameCount++;
 	g_inputRead = chimera_input_reads > 0;
 }
 
@@ -462,37 +538,35 @@ ECL_EXPORT const uint8_t *ReadBus(int32_t bus, int64_t addr, int32_t len) { (voi
 ECL_EXPORT void PokeBus(int32_t bus, int32_t addr, int32_t value) { (void)bus; (void)addr; (void)value; }
 
 /* Export Save Data: each disk the Amiga has written to, as it is now (the
- * table patch 0003 keeps in disk.c), under the disk's own name */
-struct chimera_disk { char name[MAX_DPATH]; uae_u8 *data; size_t size; };
+ * table patch 0003 keeps in disk.c), as an .adf under the disk's own name */
+struct chimera_disk { char name[MAX_DPATH]; uae_u8 *data; size_t size; uae_u32 crc; };
 extern struct chimera_disk chimera_disks[];
 extern int chimera_disk_count;
 extern void chimera_disks_sync(void);
+extern int chimera_disk_changed(int i);
 static int g_saveIndex[32], g_saveCount;
-
-static int disk_changed(int i)
-{
-	FILE *f = fopen(chimera_disks[i].name, "rb");
-	if (!f) return 1;
-	int changed = 0;
-	uint8_t buf[4096];
-	size_t at = 0, got;
-	while ((got = fread(buf, 1, sizeof buf, f)) > 0 && !changed)
-	{
-		if (at + got > chimera_disks[i].size || memcmp(buf, chimera_disks[i].data + at, got)) changed = 1;
-		at += got;
-	}
-	fclose(f);
-	return changed || at != chimera_disks[i].size;
-}
+static char g_saveNames[32][MAX_DPATH + 8];
 
 ECL_EXPORT int32_t GetSaveDataFileCount(void)
 {
 	chimera_disks_sync();
 	g_saveCount = 0;
 	for (int i = 0; i < chimera_disk_count && g_saveCount < 32; i++)
-		if (disk_changed(i)) g_saveIndex[g_saveCount++] = i;
+	{
+		if (!chimera_disk_changed(i)) continue;
+		/* a packed disk (.adz, .dms) is held unpacked: it goes out as an .adf */
+		char *name = g_saveNames[g_saveCount];
+		snprintf(name, MAX_DPATH + 8, "%s", chimera_disks[i].name);
+		char *dot = strrchr(name, '.');
+		if (!dot || strcasecmp(dot, ".adf"))
+		{
+			if (dot) *dot = '\0';
+			strcat(name, ".adf");
+		}
+		g_saveIndex[g_saveCount++] = i;
+	}
 	return g_saveCount;
 }
-ECL_EXPORT const char *GetSaveDataFileName(int32_t i) { return i >= 0 && i < g_saveCount ? chimera_disks[g_saveIndex[i]].name : ""; }
+ECL_EXPORT const char *GetSaveDataFileName(int32_t i) { return i >= 0 && i < g_saveCount ? g_saveNames[i] : ""; }
 ECL_EXPORT int64_t GetSaveDataFileSize(int32_t i) { return i >= 0 && i < g_saveCount ? (int64_t)chimera_disks[g_saveIndex[i]].size : 0; }
 ECL_EXPORT const uint8_t *GetSaveDataFileBuffer(int32_t i) { return i >= 0 && i < g_saveCount ? chimera_disks[g_saveIndex[i]].data : NULL; }

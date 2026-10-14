@@ -49,6 +49,14 @@ flags = [
   '-fwrapv',
   '-fno-strict-aliasing',
   '-ffp-contract=off',
+  # PUAE reads at least one local variable before it writes it, somewhere
+  # on the mouse's path (measured: a native build with every such variable
+  # filled with zeros and one with a pattern part ways once the mouse moves).
+  # What it read was whatever the C library left on the stack, which differs
+  # between the native build (glibc) and the sandbox (musl). Filled with
+  # zeros, it is the same in every build. (It is not the whole difference
+  # between the two builds once the mouse moves: docs/PLAN.md.)
+  '-ftrivial-auto-var-init=zero',
 ]
 add_project_arguments(defs + flags, language: 'c')
 

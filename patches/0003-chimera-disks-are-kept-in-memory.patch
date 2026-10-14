@@ -1,15 +1,15 @@
 diff --git a/sources/src/disk.c b/sources/src/disk.c
-index d5e318e2..36041804 100644
+index d5e318e2..86a79a0a 100644
 --- a/sources/src/disk.c
 +++ b/sources/src/disk.c
-@@ -780,6 +780,36 @@ static void drive_settype_id (drive *drv)
+@@ -780,6 +780,41 @@ static void drive_settype_id (drive *drv)
  #endif
  }
  
 +#ifdef CHIMERA_CORE
 +/* Chimera: every disk the machine has had in a drive, as it last left it */
 +#define CHIMERA_MAX_DISKS 32
-+struct chimera_disk { TCHAR name[MAX_DPATH]; uae_u8 *data; size_t size; };
++struct chimera_disk { TCHAR name[MAX_DPATH]; uae_u8 *data; size_t size; uae_u32 crc; };
 +struct chimera_disk chimera_disks[CHIMERA_MAX_DISKS];
 +int chimera_disk_count;
 +static int chimera_disk_find (const TCHAR *name)
@@ -28,6 +28,11 @@ index d5e318e2..36041804 100644
 +	if (data && idx >= 0 && len == chimera_disks[idx].size)
 +		memcpy (chimera_disks[idx].data, data, len);
 +}
++/* for the core's export: has the machine changed this disk? */
++int chimera_disk_changed (int i)
++{
++	return get_crc32 (chimera_disks[i].data, (int)chimera_disks[i].size) != chimera_disks[i].crc;
++}
 +/* for the core's export: every drive's disk back into the table first */
 +void chimera_disks_sync (void)
 +{
@@ -39,7 +44,7 @@ index d5e318e2..36041804 100644
  static void drive_image_free (drive *drv)
  {
  	switch (drv->filetype)
-@@ -802,6 +832,9 @@ static void drive_image_free (drive *drv)
+@@ -802,6 +837,9 @@ static void drive_image_free (drive *drv)
  		break;
  	}
  	drv->filetype = ADF_NONE;
@@ -49,7 +54,7 @@ index d5e318e2..36041804 100644
  	zfile_fclose(drv->diskfile);
  	drv->diskfile = NULL;
  	zfile_fclose(drv->writediskfile);
-@@ -1000,12 +1033,44 @@ int DISK_validate_filename (struct uae_prefs *p, const TCHAR *fname_in, int num,
+@@ -1000,12 +1038,45 @@ int DISK_validate_filename (struct uae_prefs *p, const TCHAR *fname_in, int num,
  		_tcscpy(outfname, outname);
  
  	if (leave_open || !zf) {
@@ -71,6 +76,7 @@ index d5e318e2..36041804 100644
 +				chimera_disks[idx].data = xmalloc (uae_u8, (size_t)size);
 +				zfile_fseek (file, 0, SEEK_SET);
 +				zfile_fread (chimera_disks[idx].data, 1, (size_t)size, file);
++				chimera_disks[idx].crc = get_crc32 (chimera_disks[idx].data, (int)size);
 +			}
 +			zfile_fclose (file);
 +		}
@@ -94,3 +100,17 @@ index d5e318e2..36041804 100644
  		if (f && crc32)
  			*crc32 = zfile_crc32 (f);
  		if (!zf) {
+@@ -1263,7 +1334,13 @@ static int openwritefile (struct uae_prefs *p, drive *drv, int create)
+ 			if (drv->write_num_tracks > drv->num_tracks)
+ 				drv->num_tracks = drv->write_num_tracks;
+ 		}
++#ifdef CHIMERA_CORE
++	/* Chimera: every disk is a copy in memory, which UAE takes for a packed
++	 * image; the copy is meant to be written to (patch 0003) */
++	} else if (zfile_iscompressed (drv->diskfile) && chimera_disk_find (zfile_getname (drv->diskfile)) < 0) {
++#else
+ 	} else if (zfile_iscompressed (drv->diskfile)) {
++#endif
+ 		drv->wrprot = 1;
+ 	}
+ 	return drv->writediskfile ? 1 : 0;

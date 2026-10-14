@@ -1,5 +1,5 @@
 diff --git a/libretro/libretro-core.c b/libretro/libretro-core.c
-index 16552766..e37bcc9a 100644
+index 16552766..321609ce 100644
 --- a/libretro/libretro-core.c
 +++ b/libretro/libretro-core.c
 @@ -2,6 +2,7 @@
@@ -10,7 +10,21 @@ index 16552766..e37bcc9a 100644
  
  #include "retrodep/WHDLoad_files.zip.c"
  #include "retrodep/WHDLoad_hdf.gz.c"
-@@ -7389,6 +7390,15 @@ static bool retro_create_config(void)
+@@ -78,7 +79,13 @@ unsigned short int retrox_crop = 0;
+ unsigned short int retroy_crop = 0;
+ float aspect_ratio = 0;
+ 
++#ifdef CHIMERA_CORE
++/* Chimera: custom.c defines it as uae_u16; read as an int, two bytes of the
++ * next variable came with it, which differ from build to build */
++extern uae_u16 bplcon0;
++#else
+ extern int bplcon0;
++#endif
+ extern int detected_screen_resolution;
+ extern int diwlastword_total;
+ extern int diwfirstword_total;
+@@ -7389,6 +7396,15 @@ static bool retro_create_config(void)
     if (cpu_cycle_exact_force)
        log_cb(RETRO_LOG_INFO, "Forcing Cycle-exact.\n");
  

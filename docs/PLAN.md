@@ -153,3 +153,81 @@ package passes Chimera's package checks (18 of 18). A project of Ninja
 Mission with a key held at frame 1400 plays in Chimera's headless runner
 (`chimera-run --project`, the Kickstart given with `--firmware`) to the
 Chip RAM the sandbox runner leaves, and another than the idle run's.
+
+## The tests, and what they found (2026-10-14)
+
+**A program of the tests' own.** No Kickstart of Commodore's and no game
+may be on a CI runner. PUAE carries AROS's free replacement Kickstart, and
+`tests/make-amiga-disk.py` writes a disk whose boot block is a small 68000
+program, hand-assembled in the script. It writes its own first 512 bytes to
+sector 1700 through the drive, takes the machine over, and every frame
+copies JOY1DAT, JOY0DAT, CIA-A's port A, POTGOR and the last key into Chip
+RAM at 0x7E000, counts the frames, and colours the screen from what it
+read. It boots with AROS (at about frame 630) and with Kickstart 1.3.
+
+**The test script**, `waterbox/run-gate.sh`: 26 tests, 26 passed with every
+file, in under two minutes. 19 need no file of anyone's: each joystick
+direction and both buttons, the mouse's movement and buttons, a key going
+down and up, a joystick in port 1, which controls are live for each port
+setting, native and sandbox with every kind of control used, lag frames,
+the three savestate tests, the disk write coming out as save data, a disk
+change, and the two refusals; and in Chimera's headless runner a project of
+the program. With Ninja Mission and the Kickstarts: the game runs, native
+and sandbox agree, savestates, an A1200, the Starting Clock, and a change
+from Budokan's second disk to its first.
+
+**Broken on purpose once**: with Fire 2 never sent, a key never let go,
+every frame said to have read the controls, Next Disk doing nothing, the
+Starting Clock ignored and no disk exported, seven tests failed:
+`amiga:joystick`, `amiga:keyboard`, `amiga:lag`, `amiga:disk-write`,
+`amiga:disk-change`, `game:clock` and `game:disk-change`.
+
+**What the tests found:**
+
+- **Memory files were write protected.** UAE takes any disk held in memory
+  for a packed image and write protects it (`zfile_iscompressed`). Patch
+  0003 exempts the core's own copies, and a disk is now known to have
+  changed by a checksum taken when it was read; a packed disk goes out as
+  an `.adf`.
+- **The host's clock reached the machine.** Kickstart 3.1 reads the A1200's
+  battery-backed clock, and AROS reads one too; UAE takes it from `time()`
+  and `localtime()`, so native (the real time, and the host's time zone)
+  and sandbox (its fixed clock, UTC) ran differently from frame 40. The core
+  now defines `time`, `gettimeofday`, `clock_gettime`, `localtime` and
+  `localtime_r` itself: the time is the new Starting Clock setting (the
+  first of January 2000 by default) plus the frames run, in UTC.
+- **A missing Kickstart is refused** by its name (PUAE starts without it,
+  to a grey screen).
+- **Upstream reads `bplcon0` as an `int`** in `libretro-core.c`, where
+  custom.c defines it as 16 bits, so two bytes of the next variable came
+  with it (found by AddressSanitizer). Patch 0001 declares it as custom.c
+  has it.
+- **The save folder.** PUAE looks two characters back from the end of the
+  save folder's name; with "." that is before the name. The save folder is
+  now "saves" (nothing is saved there).
+- **Locals read before they are written.** A native build with every local
+  filled with zeros and one with a pattern part ways once the mouse moves,
+  so PUAE reads at least one local before writing it. Both builds now fill
+  locals with zeros (`-ftrivial-auto-var-init=zero`).
+- **The sound rate on AROS.** After AROS starts, PUAE computes its sound
+  rate from a frame of 569 lines while the frames are 313, and hands out
+  486 samples a frame instead of 882. See "Open problems".
+
+## Open problems (2026-10-14)
+
+- **The mouse under the Amiga's own system.** With Ninja Mission on
+  Kickstart 1.3, a mouse moved for some frames makes the counter the game
+  reads differ by one between the native build and the sandbox, from about
+  three frames after the movement starts. Each is the same run after run,
+  and the sandbox's savestates are exact; a test program that reads the
+  mouse itself, with the system off, agrees on both Kickstarts. The native
+  build gives another run again when built without optimisation, and the
+  difference moved or went away when code was added to the input code, so
+  it is code-generation dependent. Ruled out: the clock, the compiler's
+  code flags, the contents of the heap, overlapping copies, mismatched
+  declarations (one found and fixed, not this). The game tests do not move
+  the mouse until this is found.
+- **The sound rate on AROS** (above): the sound of a frame is 486 samples,
+  not 882, once AROS has started; with Kickstart 1.3 it was seen once while
+  Ninja Mission loaded. Native and sandbox agree, so it is PUAE's own
+  arithmetic (`compute_vsynctime`, `maxvpos_nom`).
