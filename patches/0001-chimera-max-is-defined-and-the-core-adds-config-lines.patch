@@ -1,0 +1,28 @@
+diff --git a/libretro/libretro-core.c b/libretro/libretro-core.c
+index 16552766..e37bcc9a 100644
+--- a/libretro/libretro-core.c
++++ b/libretro/libretro-core.c
+@@ -2,6 +2,7 @@
+ #include "libretro-core.h"
+ #include "libretro-mapper.h"
+ #include "libretro-graph.h"
++#include <retro_miscellaneous.h> /* MAX: no other header here defines it */
+ 
+ #include "retrodep/WHDLoad_files.zip.c"
+ #include "retrodep/WHDLoad_hdf.gz.c"
+@@ -7389,6 +7390,15 @@ static bool retro_create_config(void)
+    if (cpu_cycle_exact_force)
+       log_cb(RETRO_LOG_INFO, "Forcing Cycle-exact.\n");
+ 
++#ifdef CHIMERA_CORE
++   /* Chimera: the core's own lines (what is plugged into the ports, and the
++    * project's machine settings), last, so that they are what counts */
++   {
++      extern const char *chimera_extra_config(void);
++      retro_config_append("%s", chimera_extra_config());
++   }
++#endif
++
+    /* Scan for specific rows and print the final config in debug log for copypaste purposes */
+    log_cb(RETRO_LOG_DEBUG, "Generated config:\n");
+    log_cb(RETRO_LOG_DEBUG, "-----------------\n");

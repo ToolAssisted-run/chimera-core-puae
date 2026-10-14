@@ -25,6 +25,7 @@
 #include "sysdeps.h"
 #include "options.h"
 #include "memory.h"
+#include "inputdevice.h"
 
 /* ---- what went wrong, for Chimera to show -------------------------------- */
 static char g_loadError[512];
@@ -71,11 +72,130 @@ static int g_render = 1;
 ECL_INVISIBLE static int16_t g_audio[MAX_SAMPLES * 2];
 static int g_audioFrames;
 
-/* ---- the controls ------------------------------------------------------- */
-enum { kUp, kDown, kLeft, kRight, kFire1, kFire2, kButtons };
-static const char *const kButtonNames[kButtons] = { "P1 Up", "P1 Down", "P1 Left", "P1 Right", "P1 Fire", "P1 Fire 2" };
-static int g_held[kButtons];
+/* ---- the controls -------------------------------------------------------
+ * The Amiga's two ports and its keyboard, given to UAE's own input
+ * functions (inputdevice.c) once a frame, before the frame runs. What is in
+ * each port is a setting: port 1 (the mouse port) has a mouse by default,
+ * port 2 (the joystick port) a joystick. UAE's joystick 0 is the one in
+ * port 2, its joystick 1 the one in port 1, its mouse 0 the one in port 1. */
+enum {
+	/* the joystick, or the CD32's pad, in port 2 */
+	kP1Up, kP1Down, kP1Left, kP1Right, kP1Fire, kP1Fire2,
+	kP1Play, kP1Rewind, kP1Forward, kP1Green, kP1Yellow,
+	/* the joystick in port 1 */
+	kP2Up, kP2Down, kP2Left, kP2Right, kP2Fire, kP2Fire2,
+	/* the mouse in port 1 */
+	kMouseLeft, kMouseRight, kMouseMiddle,
+	kFirstKey
+};
+static const struct { const char *name; int code; } kKeys[] = {
+	{ "Esc", 0x45 }, { "F1", 0x50 }, { "F2", 0x51 }, { "F3", 0x52 }, { "F4", 0x53 }, { "F5", 0x54 },
+	{ "F6", 0x55 }, { "F7", 0x56 }, { "F8", 0x57 }, { "F9", 0x58 }, { "F10", 0x59 },
+	{ "`", 0x00 }, { "1", 0x01 }, { "2", 0x02 }, { "3", 0x03 }, { "4", 0x04 }, { "5", 0x05 }, { "6", 0x06 },
+	{ "7", 0x07 }, { "8", 0x08 }, { "9", 0x09 }, { "0", 0x0A }, { "-", 0x0B }, { "=", 0x0C }, { "\\", 0x0D },
+	{ "Backspace", 0x41 }, { "Del", 0x46 }, { "Help", 0x5F },
+	{ "Tab", 0x42 }, { "Q", 0x10 }, { "W", 0x11 }, { "E", 0x12 }, { "R", 0x13 }, { "T", 0x14 }, { "Y", 0x15 },
+	{ "U", 0x16 }, { "I", 0x17 }, { "O", 0x18 }, { "P", 0x19 }, { "[", 0x1A }, { "]", 0x1B }, { "Return", 0x44 },
+	{ "Ctrl", 0x63 }, { "Caps Lock", 0x62 }, { "A", 0x20 }, { "S", 0x21 }, { "D", 0x22 }, { "F", 0x23 },
+	{ "G", 0x24 }, { "H", 0x25 }, { "J", 0x26 }, { "K", 0x27 }, { "L", 0x28 }, { ";", 0x29 }, { "'", 0x2A },
+	{ "#", 0x2B },
+	{ "Left Shift", 0x60 }, { "<>", 0x30 }, { "Z", 0x31 }, { "X", 0x32 }, { "C", 0x33 }, { "V", 0x34 },
+	{ "B", 0x35 }, { "N", 0x36 }, { "M", 0x37 }, { ",", 0x38 }, { ".", 0x39 }, { "/", 0x3A }, { "Right Shift", 0x61 },
+	{ "Left Alt", 0x64 }, { "Left Amiga", 0x66 }, { "Space", 0x40 }, { "Right Amiga", 0x67 }, { "Right Alt", 0x65 },
+	{ "Cursor Up", 0x4C }, { "Cursor Down", 0x4D }, { "Cursor Left", 0x4F }, { "Cursor Right", 0x4E },
+	{ "Keypad (", 0x5A }, { "Keypad )", 0x5B }, { "Keypad /", 0x5C }, { "Keypad *", 0x5D },
+	{ "Keypad 7", 0x3D }, { "Keypad 8", 0x3E }, { "Keypad 9", 0x3F }, { "Keypad -", 0x4A },
+	{ "Keypad 4", 0x2D }, { "Keypad 5", 0x2E }, { "Keypad 6", 0x2F }, { "Keypad +", 0x5E },
+	{ "Keypad 1", 0x1D }, { "Keypad 2", 0x1E }, { "Keypad 3", 0x1F }, { "Keypad Enter", 0x43 },
+	{ "Keypad 0", 0x0F }, { "Keypad .", 0x3C },
+};
+#define KEY_COUNT ((int)(sizeof kKeys / sizeof kKeys[0]))
+#define BUTTON_COUNT (kFirstKey + KEY_COUNT)
+static const char *const kPortButtonNames[kFirstKey] = {
+	"P1 Up", "P1 Down", "P1 Left", "P1 Right", "P1 Fire", "P1 Fire 2",
+	"P1 Play", "P1 Rewind", "P1 Forward", "P1 Green", "P1 Yellow",
+	"P2 Up", "P2 Down", "P2 Left", "P2 Right", "P2 Fire", "P2 Fire 2",
+	"Mouse Left", "Mouse Right", "Mouse Middle",
+};
+static char g_keyNames[KEY_COUNT][24];
+static int g_held[BUTTON_COUNT], g_was[BUTTON_COUNT];
+enum { kMouseX, kMouseY, kAxes };
+static const char *const kAxisNames[kAxes] = { "Mouse X", "Mouse Y" };
+static int g_axis[kAxes];
 static int g_inputRead;
+extern int chimera_input_reads;   /* inputdevice.c (patch 0004) */
+
+/* what is in each port */
+enum { kNone, kMouse, kJoystick, kPad };
+static int g_port1 = kMouse, g_port2 = kJoystick;
+
+static int port_setting(const char *name, int otherwise)
+{
+	char v[32];
+	if (wbx_setting_str(name, v, sizeof v) <= 0) return otherwise;
+	if (!strcmp(v, "none")) return kNone;
+	if (!strcmp(v, "mouse")) return kMouse;
+	if (!strcmp(v, "joystick")) return kJoystick;
+	if (!strcmp(v, "cd32pad")) return kPad;
+	return otherwise;
+}
+
+static int button_active(int i)
+{
+	if (i >= kFirstKey) return 1;
+	if (i <= kP1Fire2) return g_port2 == kJoystick || g_port2 == kPad;
+	if (i <= kP1Yellow) return g_port2 == kPad;
+	if (i <= kP2Fire2) return g_port1 == kJoystick;
+	return g_port1 == kMouse;
+}
+
+/* UAE's configuration lines for the ports (patch 0005 adds them last) */
+static char g_extraConfig[1024];
+const char *chimera_extra_config(void)
+{
+	static const char *const port1[] = { "joyport0=none\n", "joyport0=mouse\n", "joyport0=joy1\njoyport0mode=djoy\n", "" };
+	static const char *const port2[] = { "joyport1=none\n", "", "joyport1=joy0\njoyport1mode=djoy\n", "joyport1=joy0\njoyport1mode=cd32joy\n" };
+	snprintf(g_extraConfig, sizeof g_extraConfig, "%s%s", port1[g_port1], port2[g_port2]);
+	return g_extraConfig;
+}
+
+/* one joystick's directions and two buttons, as UAE takes them */
+static void give_joystick(int joy, int up, int pad)
+{
+	setjoystickstate(joy, 0, g_held[up + 2] ? -1 : g_held[up + 3] ? 1 : 0, 1);
+	setjoystickstate(joy, 1, g_held[up] ? -1 : g_held[up + 1] ? 1 : 0, 1);
+	setjoybuttonstate(joy, pad ? JOYBUTTON_CD32_RED : JOYBUTTON_1, g_held[up + 4]);
+	setjoybuttonstate(joy, pad ? JOYBUTTON_CD32_BLUE : JOYBUTTON_2, g_held[up + 5]);
+}
+
+static void give_controls(void)
+{
+	if (g_port2 == kJoystick || g_port2 == kPad)
+		give_joystick(0, kP1Up, g_port2 == kPad);
+	if (g_port2 == kPad)
+	{
+		setjoybuttonstate(0, JOYBUTTON_CD32_PLAY, g_held[kP1Play]);
+		setjoybuttonstate(0, JOYBUTTON_CD32_RWD, g_held[kP1Rewind]);
+		setjoybuttonstate(0, JOYBUTTON_CD32_FFW, g_held[kP1Forward]);
+		setjoybuttonstate(0, JOYBUTTON_CD32_GREEN, g_held[kP1Green]);
+		setjoybuttonstate(0, JOYBUTTON_CD32_YELLOW, g_held[kP1Yellow]);
+	}
+	if (g_port1 == kJoystick)
+		give_joystick(1, kP2Up, 0);
+	if (g_port1 == kMouse)
+	{
+		if (g_axis[kMouseX]) setmousestate(0, 0, g_axis[kMouseX], 0);
+		if (g_axis[kMouseY]) setmousestate(0, 1, g_axis[kMouseY], 0);
+		for (int b = 0; b < 3; b++)
+			if (g_held[kMouseLeft + b] != g_was[kMouseLeft + b])
+				setmousebuttonstate(0, b, g_held[kMouseLeft + b]);
+	}
+	/* a key is told when it goes down and when it comes up, as a keyboard does */
+	for (int k = 0; k < KEY_COUNT; k++)
+		if (g_held[kFirstKey + k] != g_was[kFirstKey + k])
+			inputdevice_do_keyboard(kKeys[k].code, g_held[kFirstKey + k]);
+	memcpy(g_was, g_held, sizeof g_was);
+}
 
 /* ---- the callbacks PUAE calls ------------------------------------------- */
 static struct retro_keyboard_callback g_keyboard;
@@ -184,21 +304,12 @@ static size_t audio_batch(const int16_t *data, size_t frames)
 
 static void input_poll(void) {}
 
+/* The libretro layer's own gamepad mapping is given nothing: the controls
+ * reach UAE directly (give_controls). */
 static int16_t input_state(unsigned port, unsigned device, unsigned index, unsigned id)
 {
-	(void)index;
-	g_inputRead = 1;
-	if (port != 0 || (device & RETRO_DEVICE_MASK) != RETRO_DEVICE_JOYPAD) return 0;
-	switch (id)
-	{
-	case RETRO_DEVICE_ID_JOYPAD_UP: return g_held[kUp];
-	case RETRO_DEVICE_ID_JOYPAD_DOWN: return g_held[kDown];
-	case RETRO_DEVICE_ID_JOYPAD_LEFT: return g_held[kLeft];
-	case RETRO_DEVICE_ID_JOYPAD_RIGHT: return g_held[kRight];
-	case RETRO_DEVICE_ID_JOYPAD_B: return g_held[kFire1];
-	case RETRO_DEVICE_ID_JOYPAD_A: return g_held[kFire2];
-	default: return 0;
-	}
+	(void)port; (void)device; (void)index; (void)id;
+	return 0;
 }
 
 /* ---- the memory --------------------------------------------------------- */
@@ -239,6 +350,12 @@ ECL_EXPORT int Init(void)
 		return 0;
 	}
 
+	g_port1 = port_setting("port1", kMouse);
+	g_port2 = port_setting("port2", kJoystick);
+	if (g_port1 == kPad) g_port1 = kJoystick;   /* the CD32's pad goes in port 2 only */
+	for (int k = 0; k < KEY_COUNT; k++)
+		snprintf(g_keyNames[k], sizeof g_keyNames[k], "Key %s", kKeys[k].name);
+
 	retro_set_environment(environment);
 	retro_set_video_refresh(video_refresh);
 	retro_set_audio_sample(audio_sample);
@@ -264,25 +381,35 @@ ECL_EXPORT int Init(void)
 	return 1;
 }
 
-ECL_EXPORT int GetButtonCount(void) { return kButtons; }
-ECL_EXPORT const char *GetButtonName(int32_t i) { return i >= 0 && i < kButtons ? kButtonNames[i] : ""; }
-ECL_EXPORT int IsButtonActive(int32_t i) { return i >= 0 && i < kButtons; }
+ECL_EXPORT int GetButtonCount(void) { return BUTTON_COUNT; }
+ECL_EXPORT const char *GetButtonName(int32_t i)
+{
+	if (i < 0 || i >= BUTTON_COUNT) return "";
+	return i < kFirstKey ? kPortButtonNames[i] : g_keyNames[i - kFirstKey];
+}
+ECL_EXPORT int IsButtonActive(int32_t i) { return i >= 0 && i < BUTTON_COUNT && button_active(i); }
 ECL_EXPORT void SetButton(int32_t i, int32_t state)
 {
-	if (i >= 0 && i < kButtons) g_held[i] = state != 0;
+	if (i >= 0 && i < BUTTON_COUNT) g_held[i] = state != 0;
 }
 
-ECL_EXPORT int GetAxisCount(void) { return 0; }
-ECL_EXPORT const char *GetAxisName(int32_t i) { (void)i; return ""; }
-ECL_EXPORT int IsAxisActive(int32_t i) { (void)i; return 0; }
-ECL_EXPORT void SetAxis(int32_t i, int32_t value) { (void)i; (void)value; }
+ECL_EXPORT int GetAxisCount(void) { return kAxes; }
+ECL_EXPORT const char *GetAxisName(int32_t i) { return i >= 0 && i < kAxes ? kAxisNames[i] : ""; }
+ECL_EXPORT int IsAxisActive(int32_t i) { return i >= 0 && i < kAxes && g_port1 == kMouse; }
+/* how far the mouse moves in this frame, in the mouse's own counts */
+ECL_EXPORT void SetAxis(int32_t i, int32_t value)
+{
+	if (i >= 0 && i < kAxes) g_axis[i] = value < -128 ? -128 : value > 127 ? 127 : value;
+}
 
 ECL_EXPORT void FrameAdvance(uint64_t packed)
 {
 	(void)packed;
-	g_inputRead = 0;
 	g_audioFrames = 0;
+	give_controls();
+	chimera_input_reads = 0;
 	retro_run();
+	g_inputRead = chimera_input_reads > 0;
 }
 
 ECL_EXPORT int InputWasRead(void) { return g_inputRead; }

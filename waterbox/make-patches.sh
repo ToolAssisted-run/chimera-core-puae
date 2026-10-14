@@ -11,9 +11,10 @@ tree="$root/extern/libretro-uae"
 
 # name | files (space separated), in the order the patches apply
 series='
-0001-chimera-max-is-defined|libretro/libretro-core.c
+0001-chimera-max-is-defined-and-the-core-adds-config-lines|libretro/libretro-core.c
 0002-chimera-a-file-with-no-folder|libretro/libretro-glue.c
 0003-chimera-disks-are-kept-in-memory|sources/src/disk.c
+0004-chimera-reads-of-the-controls-are-counted|sources/src/inputdevice.c sources/src/cia.c
 '
 
 rm -f "$root"/patches/*.patch

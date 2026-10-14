@@ -1,0 +1,75 @@
+diff --git a/sources/src/cia.c b/sources/src/cia.c
+index 59182fcf..757ed520 100644
+--- a/sources/src/cia.c
++++ b/sources/src/cia.c
+@@ -1734,6 +1734,16 @@ static uae_u8 ReadCIAA(uae_u32 addr, uae_u32 *flags)
+ 	case 0:
+ 	{
+ 		*flags |= 1;
++#ifdef CHIMERA_CORE
++		/* Chimera: the fire buttons are read here (inputdevice.c counts
++		 * the reads). Not when the Kickstart ROM reads it: the ROM does,
++		 * all the time, for the drive's status bits in the same byte. */
++		{
++			extern int chimera_input_reads;
++			if ((munge24 (M68K_GETPC) & 0xFFF80000) != 0xF80000)
++				chimera_input_reads++;
++		}
++#endif
+ 		uae_u8 v = DISK_status_ciaa() & 0x3c;
+ 		v |= handle_joystick_buttons(c->pra, c->dra);
+ 		v |= (c->pra | (c->dra ^ 3)) & 0x03;
+diff --git a/sources/src/inputdevice.c b/sources/src/inputdevice.c
+index 08f8f1a6..2d82f232 100644
+--- a/sources/src/inputdevice.c
++++ b/sources/src/inputdevice.c
+@@ -3694,9 +3694,20 @@ static uae_u16 getjoystate (int joy)
+ 	return v;
+ }
+ 
++#ifdef CHIMERA_CORE
++/* Chimera: how many times the machine read its controls (the two ports'
++ * counters, the paddle and button registers, and CIA-A's port A, cia.c)
++ * since the core last cleared it. A frame with none is a lag frame. */
++int chimera_input_reads;
++#define CHIMERA_INPUT_READ() chimera_input_reads++
++#else
++#define CHIMERA_INPUT_READ()
++#endif
++
+ uae_u16 JOY0DAT (void)
+ {
+ 	uae_u16 v;
++	CHIMERA_INPUT_READ();
+ 	readinput ();
+ 	v = getjoystate (0);
+ 	v = dongle_joydat (0, v);
+@@ -3707,6 +3718,7 @@ uae_u16 JOY0DAT (void)
+ uae_u16 JOY1DAT (void)
+ {
+ 	uae_u16 v;
++	CHIMERA_INPUT_READ();
+ 	readinput ();
+ 	v = getjoystate (1);
+ 	v = dongle_joydat (1, v);
+@@ -4438,10 +4450,12 @@ static uae_u16 POTDAT (int joy)
+ 
+ uae_u16 POT0DAT (void)
+ {
++	CHIMERA_INPUT_READ();
+ 	return POTDAT (0);
+ }
+ uae_u16 POT1DAT (void)
+ {
++	CHIMERA_INPUT_READ();
+ 	return POTDAT (1);
+ }
+ 
+@@ -4485,6 +4499,7 @@ void POTGO (uae_u16 v)
+ 
+ uae_u16 POTGOR (void)
+ {
++	CHIMERA_INPUT_READ();
+ 	uae_u16 v;
+ 
+ 	v = handle_joystick_potgor (potgo_value) & 0x5500;

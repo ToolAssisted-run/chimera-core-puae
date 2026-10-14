@@ -76,3 +76,41 @@ core gives PUAE a disk's file directly and none of that is used.
   and sound. A state saved and loaded every frame, a state moved to a new
   sandbox, and a state kept at frame 800 and loaded at 1,200 (79 digests
   after the load repeat those after the save) change nothing.
+
+## The controls (2026-10-14)
+
+- **What is in each port is a setting**: Port 1 (the mouse port) has a
+  mouse by default, or a joystick, or nothing; Port 2 (the joystick port)
+  has a joystick by default, or the CD32's pad, or nothing. The core adds
+  UAE's own configuration lines for them (`joyport0=`, `joyport1=`,
+  `joyport1mode=`) at the end of the configuration PUAE writes: patch 0001
+  gives the core that hook, which later settings use too.
+- **The controls reach UAE directly**, through UAE's own input functions
+  (`setjoystickstate`, `setjoybuttonstate`, `setmousestate`,
+  `setmousebuttonstate`, `inputdevice_do_keyboard`), once a frame before
+  the frame runs. PUAE's libretro gamepad mapping (a gamepad's buttons as a
+  mouse, turbo fire, a keyboard on screen, mouse speed) is given nothing:
+  a movie holds the Amiga's own controls.
+- **Controls**: P1 Up, Down, Left, Right, Fire, Fire 2 for the joystick in
+  port 2, with Play, Rewind, Forward, Green and Yellow when it is the
+  CD32's pad (Fire and Fire 2 are then its red and blue buttons); P2 the
+  same for a joystick in port 1; Mouse Left, Right and Middle, and the axes
+  Mouse X and Mouse Y, how far the mouse moves in a frame (-128 to 127, the
+  mouse's own counts); and the 95 keys of the Amiga's keyboard, under the
+  names printed on them. A key is told to the machine when it goes down and
+  when it comes up.
+- **Lag frames**: a frame in which the machine did not read its controls.
+  Patch 0004 counts the reads of the two ports' counters (JOY0DAT,
+  JOY1DAT), the paddle and button registers (POT0DAT, POT1DAT, POTGOR) and
+  CIA-A's port A (the fire buttons), but not CIA-A's port A when the
+  Kickstart ROM reads it: it does all the time, for the drive's status bits
+  in the same byte. The keyboard is not a read: the machine is told of a
+  key by an interrupt.
+
+Measured: a press of fire, of the mouse's button and of a key each change
+the run of Ninja Mission; native and sandbox print the same 52 digests with
+all of them used and the mouse moved. Budokan reaches its intro, Prince of
+Persia (Softgold, German) its title. Another copy of Prince of Persia
+(`pop.adf`) stays on a red screen and never reads its controls; it was not
+looked into. Ninja Mission on an A1200 with Kickstart 3.1 boots to the
+disk's own anti-virus boot block.
