@@ -29,6 +29,10 @@ design log, with what was decided, why, and what was measured.
   compiled for the sandbox and for the host.
 - `waterbox/guest-syscalls.c` - sandbox-only answers to "is this file
   there" (the sandbox has files and no folders).
+- `waterbox/ipf-reader.c` - IPF disks: MAME's reader, ported to C, in place
+  of PUAE's `caps/caps.c`, which loads the SPS library (its licence forbids
+  commercial use, so it cannot be built in). `tests/ipf-check/` builds it
+  alone for the tests.
 - `waterbox/waterbox.config`, `file_slots.json`, `default_keybinds.json`,
   `package-licenses.json`, `licenses/` - what the package declares.
 - `waterbox/run-native.c`, `waterbox/run-wbx.c` - the native runner and the
@@ -38,6 +42,8 @@ design log, with what was decided, why, and what was measured.
   (configures the sandbox build), `build-package.sh`, `run-gate.sh` (the
   test script).
 - `tests/` - `make-amiga-disk.py` (writes the disk with the test program),
+  `make-ipf.py` (writes an IPF image of a disk, with weak bits and timed
+  tracks when asked),
   `run-frontend.sh` (the window test, with its helpers), `make-project.py`
   (writes a project for a game).
 - `build/` - every build output. `tests/roms-local/` - Kickstart ROMs, and

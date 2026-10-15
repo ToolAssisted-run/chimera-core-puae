@@ -2,7 +2,7 @@
   "package": "puae",
   "effectiveTerms": "GPL-2.0",
   "commercialUse": "allowed under the GPL",
-  "note": "The core is PUAE (libretro-uae, GPL-2.0), the libretro port of UAE based on WinUAE 5.3.1, with this repository's integration (MIT). The program is distributed under the GPL version 2. Compiled in from PUAE's own tree: zlib (zlib licence), the LZMA SDK by Igor Pavlov (public domain), libretro-common (MIT), SoftFloat (its own licence and the GPL), xDMS by Andre Rodrigues de la Rocha (public domain), LHa for UNIX by Yooichi Tagawa and others (its own licence), kjmp2 by Martin J. Fiedler (zlib-style), and two ROMs as data: AROS's replacement Kickstart (AROS Public License 1.1) and the HRTMon debugger by Alain Malek (GPL). The package contains no Kickstart ROM of Commodore's and no game: the user supplies them.",
+  "note": "The core is PUAE (libretro-uae, GPL-2.0), the libretro port of UAE based on WinUAE 5.3.1, with this repository's integration (MIT). The program is distributed under the GPL version 2. Compiled in from PUAE's own tree: zlib (zlib licence), the LZMA SDK by Igor Pavlov (public domain), libretro-common (MIT), SoftFloat (its own licence and the GPL), xDMS by Andre Rodrigues de la Rocha (public domain), LHa for UNIX by Yooichi Tagawa and others (its own licence), kjmp2 by Martin J. Fiedler (zlib-style), and from this repository a port to C of MAME's IPF disk image reader by Olivier Galibert (BSD-3-Clause), which reads .ipf disks in place of the SPS library PUAE would load, and two ROMs as data: AROS's replacement Kickstart (AROS Public License 1.1) and the HRTMon debugger by Alain Malek (GPL). The package contains no Kickstart ROM of Commodore's and no game: the user supplies them.",
   "components": [
     {
       "name": "chimera-core-puae (integration)",
@@ -19,6 +19,12 @@
       "commit": "{submodule:extern/libretro-uae}",
       "file": "extern/libretro-uae/COPYING",
       "sourceUrl": "https://github.com/libretro/libretro-uae/archive/{commit}.tar.gz"
+    },
+    {
+      "name": "MAME's IPF disk image reader (ported to C in waterbox/ipf-reader.c)",
+      "license": "BSD-3-Clause",
+      "url": "https://github.com/mamedev/mame/blob/0cacb1a76d20d1b80a9e84185dabd758ee2ec876/src/lib/formats/ipf_dsk.cpp",
+      "file": "waterbox/licenses/MAME-ipf_dsk-BSD-3-Clause.txt"
     },
     {
       "name": "AROS replacement Kickstart ROM (in PUAE, sources/src/aros.rom.c)",

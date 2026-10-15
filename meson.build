@@ -75,7 +75,7 @@ uae_names = [
 foreach n : [
     'a2065.c', 'a2091.c', 'akiko.c', 'amax.c', 'ar.c', 'arcadia.c', 'aros.rom.c', 'audio.c', 'autoconf.c',
     'blitfunc.c', 'blittable.c', 'blitter.c', 'blkdev.c', 'blkdev_cdimage.c', 'bsdsocket.c', 'calc.c',
-    'caps/caps.c', 'caps/uae_dlopen.c', 'cd32_fmv.c', 'cd32_fmv_genlock.c', 'cda_play.c', 'cdrom.c',
+    'caps/uae_dlopen.c', 'cd32_fmv.c', 'cd32_fmv_genlock.c', 'cda_play.c', 'cdrom.c',
     'cdtv.c', 'cdtvcr.c', 'cfgfile.c', 'cia.c', 'cpuboard.c', 'cpudefs.c',
     'cpuemu_0.c', 'cpuemu_11.c', 'cpuemu_13.c', 'cpuemu_20.c', 'cpuemu_21.c', 'cpuemu_22.c', 'cpuemu_23.c',
     'cpuemu_24.c', 'cpuemu_31.c', 'cpuemu_32.c', 'cpuemu_33.c', 'cpuemu_34.c', 'cpuemu_35.c', 'cpuemu_40.c',
@@ -119,7 +119,10 @@ foreach n : ['compat/compat_strl.c', 'compat/compat_strcasestr.c', 'compat/fopen
   uae_names += lrc / n
 endforeach
 
-core_sources = files(uae_names) + files('waterbox/cinterface.c', 'waterbox/chimera-threads.c')
+# IPF disks: PUAE's caps/caps.c loads the SPS library, which may not be built
+# in (its licence forbids commercial use) and which the sandbox could not
+# load; waterbox/ipf-reader.c gives disk.c the same calls on MAME's reader
+core_sources = files(uae_names) + files('waterbox/cinterface.c', 'waterbox/chimera-threads.c', 'waterbox/ipf-reader.c')
 
 if meson.is_cross_build()
   # ---- the guest: core.wbx --------------------------------------------------
@@ -143,6 +146,10 @@ else
     include_directories: [include_directories('waterbox/native-shim'), inc],
     c_args: ['-I' + mb / 'source/guest/include', '-I' + mb / 'extern/jsmn'],
     dependencies: [m])
+
+  # the IPF reader alone, checked against images tests/make-ipf.py writes
+  executable('ipf-check', files('waterbox/ipf-reader.c', 'tests/ipf-check/ipf-check.c'),
+    include_directories: include_directories('tests/ipf-check', emu / 'include'))
 
   mbhost = mb / 'build/meson-linux/source/host'
   executable('run-wbx', files('waterbox/run-wbx.c'),

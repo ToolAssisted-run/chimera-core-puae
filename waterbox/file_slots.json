@@ -10,9 +10,10 @@
     "adf",
     "adz",
     "dms",
-    "fdi"
+    "fdi",
+    "ipf"
    ],
-   "help": "The game's floppy disks: .adf files (or .adz and .dms, which are packed ones, or .fdi). The first is in the drive when the Amiga is switched on; the others wait their turn, for the games that ask for another disk. Your files are never changed: the Amiga writes to copies of them in its memory.",
+   "help": "The game's floppy disks: .adf files (or .adz and .dms, which are packed ones, or .fdi, or .ipf, the format that keeps a disk's copy protection). The first is in the drive when the Amiga is switched on; the others wait their turn, for the games that ask for another disk. Your files are never changed: the Amiga writes to copies of them in its memory.",
    "exposedWhen": {
     "not": {
      "setting": "model",

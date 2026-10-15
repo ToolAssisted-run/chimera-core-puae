@@ -12,7 +12,14 @@ goes in Chimera's `Cores` folder.
 - Games on floppy disks run, and the sandboxed core gives the same results
   as a plain native build: picture, sound, joystick, keyboard, the mouse,
   lag frames, savestates and disk changes. Tried: Ninja Mission
-  (on an A500 and an A1200), Budokan (two disks) and Prince of Persia.
+  (on an A500 and an A1200), Budokan (two disks) and Prince of Persia
+  (as an `.adf` and as an `.ipf`).
+- IPF disks (the format that keeps a disk's copy protection) are read by
+  the core's own reader, a port of MAME's, not by the SPS library, whose
+  licence does not allow it here. The reader knows weak bits and the timed
+  tracks of Copylock, Speedlock and the other protections MAME knows; the
+  tests try weak bits and Copylock's timing on images of their own. No
+  copy-protected game was tried.
 - The CD32 runs games from CD, with CD audio and its save memory. Tried:
   Worms (to its first screen that needs the manual), and the CD32's own CD
   player with an audio CD.
@@ -22,12 +29,12 @@ goes in Chimera's `Cores` folder.
 - On Windows, Chimera's headless runner plays projects of floppy and CD32
   games and CDTV projects to the same memory as on Linux. Chimera's window was tried on Linux
   only.
-- Not there: hard disks and WHDLoad, a second floppy drive, IPF disk images, the CD32's video
+- Not there: hard disks and WHDLoad, a second floppy drive, the CD32's video
   cartridge (FMV), CHD disc images.
 
 ## What you bring
 
-- The game's disks: `.adf` files (or `.adz`, `.dms`, `.fdi`). A project
+- The game's disks: `.adf` files (or `.adz`, `.dms`, `.fdi`, `.ipf`). A project
   holds up to 20; the first is in the drive at the start.
 - For the CD32 and the CDTV: the game's CD, a `.cue` with its track files
   (or an `.iso` of a CD that has only data).

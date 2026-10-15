@@ -9,8 +9,10 @@
 # Chimera's own headless runner (waterbox/build-package.sh -r <it> first).
 # AMIGA_GAME=<folder> holds a game on one disk, an .adf file
 # (tests/games-local/ninja when not given), AMIGA_GAME2=<folder> a game on two
-# disks (tests/games-local/budokan), and AMIGA_KICKSTARTS=<folder> the
-# Kickstart ROMs under the names the package gives them (tests/roms-local).
+# disks (tests/games-local/budokan), AMIGA_IPF_GAME=<folder> a game on one
+# disk as an .ipf file (tests/games-local/pop: the tests' timings are
+# Prince of Persia's), and AMIGA_KICKSTARTS=<folder> the Kickstart ROMs under
+# the names the package gives them (tests/roms-local).
 #
 # Needs the native build (meson setup build/meson-native ... && ninja) and
 # the sandboxed core (waterbox/setup-guest.sh && ninja -C build/meson-guest):
@@ -41,6 +43,7 @@ core="$root/build/meson-guest/core.wbx"
 chimera_root="${CHIMERA_ROOT:-}"
 game="${AMIGA_GAME:-$root/tests/games-local/ninja}"
 game2="${AMIGA_GAME2:-$root/tests/games-local/budokan}"
+ipfgame="${AMIGA_IPF_GAME:-$root/tests/games-local/pop}"
 kicks="${AMIGA_KICKSTARTS:-$root/tests/roms-local}"
 
 work="$(mktemp -d)"
@@ -111,7 +114,7 @@ check "source:patched" "extern/libretro-uae is the pinned commit with the $patch
 
 # a sandbox build that failed must not be tested as the previous one
 stale=""
-for src in "$here"/cinterface.c "$here"/chimera-threads.c "$root"/patches/*.patch; do
+for src in "$here"/cinterface.c "$here"/chimera-threads.c "$here"/ipf-reader.c "$root"/patches/*.patch; do
 	[ -e "$src" ] || continue
 	[ "$core" -nt "$src" ] || stale="$stale $(basename "$src")"
 done
@@ -268,6 +271,34 @@ nat ch-swap ch --frames 1500 --press "$(index ch "Next Disk")":100:5 --press "$(
 check "amiga:disk-change" "with a blank disk in the drive nothing boots (the program's count: $(count "$work/ch-stay.ram")); Next Disk and Eject Disk put the program's disk in and it runs ($(count "$work/ch-swap.ram") frames by frame 1500)" \
 	[ "$(count "$work/ch-swap.ram")" -gt 100 -a "$(count "$work/ch-swap.ram")" -lt 1500 -a \( "$(count "$work/ch-stay.ram")" = 0 -o "$(count "$work/ch-stay.ram")" -gt 4000000000 \) ]
 
+# ------------------------------------------------- IPF disks
+# An .ipf disk is read by the core's own reader (waterbox/ipf-reader.c, MAME's
+# in C), not by the SPS library upstream loads. tests/make-ipf.py writes IPF
+# images of the program's disk. The reader alone (ipf-check, driven as the
+# drive drives it) hands over every cell as written, weak bits that come out
+# different on the next revolution, Copylock's cell lengths, and noise for
+# the tracks the image does not have; a second run hands over the same. In
+# the Amiga the program boots from the IPF and reads the controls as it does
+# from the .adf, and the sandbox gives the native build's digests, with a
+# state saved and loaded every frame too.
+python3 "$root/tests/make-ipf.py" "$prog" "$work/disks/check.ipf" weak=3:2:32 copylock=5 expect="$work/disks/check.expect"
+"$root/build/meson-native/ipf-check" "$work/disks/check.ipf" "$work/disks/check.expect" > "$work/ipf-check1.out" 2>&1
+ic=$?
+"$root/build/meson-native/ipf-check" "$work/disks/check.ipf" "$work/disks/check.expect" > "$work/ipf-check2.out" 2>&1
+check "ipf:reader" "the reader alone, on an IPF of the program's disk with weak bits on track 3 and Copylock's cell lengths on track 5: $(head -c 300 "$work/ipf-check1.out"); a second run hands over the same" \
+	sh -c "[ $ic = 0 ] && cmp -s '$work/ipf-check1.out' '$work/ipf-check2.out'"
+
+python3 "$root/tests/make-ipf.py" "$prog" "$work/disks/prog.ipf"
+folder pi "$aros" "$work/disks/prog.ipf"
+ipfrun="--frames 900 --report 25 --press $(index pr "P1 Up"):700:300 --press $(index pr "Key A"):720:5"
+nat ipf-adf pr $ipfrun --dump-domain "Chip RAM" "$work/ipf-adf.ram"
+nat ipf pi $ipfrun --dump-domain "Chip RAM" "$work/ipf.ram"
+box ipf-box pi $ipfrun
+box ipf-rerecord pi $ipfrun --rerecord
+for n in ipf ipf-adf ipf-box ipf-rerecord; do stream "$work/$n.out" > "$work/$n.stream"; done
+check "amiga:ipf" "the program boots from an IPF of its disk ($(count "$work/ipf.ram") frames counted, $(count "$work/ipf-adf.ram") from the .adf) and reads Up and a key as from the .adf (JOY1DAT $(half "$work/ipf.ram" 0) and $(half "$work/ipf-adf.ram" 0), last key $(byte "$work/ipf.ram" 8) and $(byte "$work/ipf-adf.ram" 8)); native and sandbox print the same $(wc -l < "$work/ipf.stream") digests, and a state saved and loaded every frame changes nothing" \
+	sh -c "[ $(count "$work/ipf.ram") -gt 200 ] && [ '$(half "$work/ipf.ram" 0)' = '$(half "$work/ipf-adf.ram" 0)' ] && [ '$(half "$work/ipf.ram" 0)' != '$(half "$work/pr-idle.ram" 0)' ] && [ '$(byte "$work/ipf.ram" 8)' = a0 ] && [ '$(half "$work/ipf.ram" 10)' = '$(half "$work/ipf-adf.ram" 10)' ] && cmp -s '$work/ipf.stream' '$work/ipf-box.stream' && cmp -s '$work/ipf-box.stream' '$work/ipf-rerecord.stream'"
+
 # ------------------------------------------------- what is refused
 mkdir -p "$work/nodisk"
 printf '{"disk":[]}' > "$work/nodisk/slots"; printf '{}' > "$work/nodisk/settings"
@@ -346,6 +377,22 @@ if [ -n "$d2" ] && [ -f "$kicks/amiga-os-130.rom" ]; then
 		sh -c "! cmp -s '$work/g2-swap.stream' '$work/g2-stay.stream' && cmp -s '$work/g2-swap.stream' '$work/g2-swap-box.stream' && [ \$(awk '{print \$7}' '$work/g2-swap.stream' | sort -u | wc -l) -gt \$(awk '{print \$7}' '$work/g2-stay.stream' | sort -u | wc -l) ]"
 else
 	report "game:disk-change" SKIP "no game on two disks (AMIGA_GAME2) or no Kickstart 1.3"
+fi
+
+ipf="$(ls "$ipfgame"/*.ipf 2> /dev/null | head -1)"
+if [ -n "$ipf" ] && [ -f "$kicks/amiga-os-130.rom" ]; then
+	folder gi '{}' "$ipf"; ln -sf "$kicks/amiga-os-130.rom" "$work/gi/amiga-os-130.rom"
+	# Prince of Persia: its title by frame 1900, Fire and Space into the game
+	girun="--frames 4000 --report 50 --press $(index gi "P1 Fire"):2950:20 --press $(index gi "Key Space"):3100:5"
+	nat gi-idle gi --frames 4000 --report 50
+	nat gi gi $girun
+	box gi-box gi $girun
+	box gi-rerecord gi $girun --rerecord
+	for n in gi gi-idle gi-box gi-rerecord; do stream "$work/$n.out" > "$work/$n.stream"; done
+	check "game:ipf" "$(basename "$ipf") boots from its IPF on Kickstart 1.3 ($(awk '{print $7}' "$work/gi.stream" | sort -u | wc -l) different pictures in $(wc -l < "$work/gi.stream") reports), the controls change the run, the sandbox gives the native build's digests, and a state saved and loaded every frame changes nothing" \
+		sh -c "[ \$(awk '{print \$7}' '$work/gi.stream' | sort -u | wc -l) -gt 10 ] && ! cmp -s '$work/gi.stream' '$work/gi-idle.stream' && cmp -s '$work/gi.stream' '$work/gi-box.stream' && cmp -s '$work/gi-box.stream' '$work/gi-rerecord.stream'"
+else
+	report "game:ipf" SKIP "no game as an .ipf (AMIGA_IPF_GAME) or no Kickstart 1.3"
 fi
 
 # ------------------------------------------------- the CD32

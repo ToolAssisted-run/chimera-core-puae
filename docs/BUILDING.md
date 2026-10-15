@@ -29,14 +29,17 @@ files in `extern/libretro-uae`, build and test, add the file to the list in
 
 `meson.build` lists PUAE's files: the same list as its own
 `Makefile.common`, without the recompiler (upstream leaves it out too), the
-CD32's video decoder and CHD discs. Upstream's libretro layer is compiled
+CD32's video decoder and CHD discs, and without `caps/caps.c`, which
+loads the SPS library for IPF disks: `waterbox/ipf-reader.c` takes its place
+(docs/PLAN.md, "IPF disks"). Upstream's libretro layer is compiled
 and used: `waterbox/cinterface.c` calls its `retro_*` functions and answers
 its questions, as a libretro frontend does.
 
 ## The two flavors
 
 - `native`: for the host. `run-native` is the reference the tests compare
-  the sandbox with.
+  the sandbox with. It also builds `ipf-check`, the IPF reader alone, which
+  the tests drive as the floppy drive does.
 - `guest`: for miniBox's sandbox. This is `core.wbx`, and `run-wbx` runs it.
 
 ```sh
@@ -70,16 +73,17 @@ Chimera's `chimera-run --project` then plays (give it the Kickstart with
 CHIMERA_ROOT=<chimera checkout> waterbox/run-gate.sh
 ```
 
-runs every test and says, for each, what was compared. The "amiga:" tests
-need nothing: `tests/make-amiga-disk.py` writes a disk whose boot block is
-a small test program, which boots with the free Kickstart PUAE carries
-(AROS's). The others need files that cannot be in this repository, and say
+runs every test and says, for each, what was compared. The "amiga:" and
+"ipf:" tests need nothing: `tests/make-amiga-disk.py` writes a disk whose
+boot block is a small test program, which boots with the free Kickstart
+PUAE carries (AROS's), and `tests/make-ipf.py` writes IPF images of it. The others need files that cannot be in this repository, and say
 SKIP without them:
 
 | Tests | What they need | Where the script looks | Or name it with |
 |---|---|---|---|
 | `game:` | a game on one disk, as a folder with an `.adf` file | `tests/games-local/ninja` | `AMIGA_GAME` |
 | `game:disk-change` | a game on two disks | `tests/games-local/budokan` | `AMIGA_GAME2` |
+| `game:ipf` | a game on one disk as an `.ipf` file (the test's timings are Prince of Persia's) | `tests/games-local/pop` | `AMIGA_IPF_GAME` |
 | `game:` | Kickstart 1.3 (and 3.1 for the A1200), under the package's names | `tests/roms-local/amiga-os-130.rom`, `amiga-os-310-a1200.rom` | `AMIGA_KICKSTARTS` (a folder) |
 | `cd32:` | the CD32's Kickstart and extended ROM; the tests write an audio CD of their own (`tests/make-audio-cd.py`) | `tests/roms-local/amiga-os-310-cd32.rom`, `amiga-os-310-cd32-ext.rom` | `AMIGA_KICKSTARTS` |
 | `cd32:game` | a CD32 game, as a folder with a `.cue` and its track files | `tests/games-local/worms` | `AMIGA_CD32_GAME` |

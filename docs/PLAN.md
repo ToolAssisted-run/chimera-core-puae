@@ -394,3 +394,94 @@ With the owner's Kickstart 1.3 and CDTV extended ROM 2.7:
   extended ROM 1.0, which upstream names first, starts it.
 - Test script 40 passed (24 passed and 16 skipped without the owner's
   files); window test 5 passed; Chimera's package checks 18.
+
+## 2026-10-14: IPF disks (user-decided)
+
+IPF is the format the Software Preservation Society keeps Amiga disks in,
+with their copy protection: weak bits, tracks whose cells are longer or
+shorter than 2 microseconds, unformatted tracks. Many games are found only
+as IPF. The owner had been told this core could not read them because of a
+commercial licence, asked for that to be looked into, and then asked for
+IPF support.
+
+**Why not upstream's way.** PUAE reads IPF through the SPS Decoder Library
+(`capsimg`), which `caps/caps.c` loads at run time. Its source is public,
+but its licence (v1.02, 2014) says redistributions "may not be sold, nor
+may they be used in a commercial product or activity". The GPL, under which
+this core is distributed, does not allow a restriction to be added, and
+Chimera's package check wants every component to allow commercial use. The
+other way emulators take, the user putting `capsimg.so` beside the program,
+is closed too: the sandbox does not load a library from the computer.
+
+**What the core does instead.** MAME has its own IPF reader,
+`src/lib/formats/ipf_dsk.cpp` by Olivier Galibert, under the BSD-3-Clause
+licence, which the GPL takes in. `waterbox/ipf-reader.c` is that file at
+MAME commit 0cacb1a7 (the one Chimera's MAME core builds), ported to C, and
+gives PUAE's floppy drive the five calls `caps/caps.c` gives it (`caps.h`);
+`meson.build` builds it in place of `caps/caps.c`. The reading of the file
+and the building of a track's cells are MAME's, step for step. Its own are:
+
+- **The hand-over.** MAME gives its drive flux transitions over one
+  revolution; UAE wants the cells as bits, and on a track whose cells are
+  not all 2 microseconds long, each byte's length in thousandths of that,
+  as the SPS library gives it. PUAE asks the library for lengths only on
+  such tracks (it does not ask for them on normal ones), and stretches a
+  track without them to one revolution; the reader does the same. Its
+  numbers for Copylock (blocks 4, 5 and 6 at 945, 995 and 1045) are the
+  ones the SPS library's source has.
+- **Weak bits and unformatted tracks** are random bits, drawn again on every
+  revolution (the drive reads such a track again each time round, as with
+  the library) from a generator whose state is in the core's memory, so a
+  savestate carries it and a movie replays the same. A track the image does
+  not have is noise of a normal track's length.
+- **The write splice** is where MAME puts it (the middle of the last gap,
+  with its three cells turned around), handed over as the library's
+  "overlap", where UAE's drive skips its few cells of jitter.
+- **Refusals.** Every track is built once when the disk is put in, so an
+  image MAME would refuse is refused then, not when the game reaches the
+  track. One check MAME does not make: a block whose data or gap
+  description starts past the end of the track's data is refused (MAME
+  would read past it).
+
+**Tests.** `tests/make-ipf.py` writes an IPF of any `.adf` as the SPS
+encoder writes an AmigaDOS track (each sector a block, its sync words as
+cells, the rest as data), with weak bits and Copylock's timing where asked,
+and a file of the cells it expects. Three tests are new:
+
+- `ipf:reader`: the reader alone (`ipf-check`, built natively from
+  `ipf-reader.c` and stand-ins for three of PUAE's headers), driven as the
+  drive drives it, on an IPF of the test program's disk with 32 weak bytes
+  on track 3 and Copylock's timing on track 5. All 160 tracks hand over the
+  cells written, on two revolutions; 256 of the 512 weak cells change from
+  one revolution to the next; the timed track has 945, 995 and 1045 exactly
+  over blocks 4 to 6 and 1000 elsewhere, and no other track has lengths;
+  the 8 tracks the image lacks are noise. A second run hands over the same.
+- `amiga:ipf`: the test program boots from an IPF of its disk on AROS
+  (275 frames counted by frame 900; 274 from the `.adf`) and reads Up and a
+  key as from the `.adf`; native and sandbox print the same 36 digests,
+  with a state saved and loaded every frame too.
+- `game:ipf`: a game on one IPF (`AMIGA_IPF_GAME`, by default
+  `tests/games-local/pop`): Prince of Persia boots on Kickstart 1.3 to its
+  title by frame 1900 and Fire and Space take it into the first level (30
+  pictures in 80 reports); native and sandbox print the same 80 digests,
+  also with a state every frame.
+
+In Chimera's headless runner a project of Prince of Persia's IPF, with Fire
+and Space pressed, plays 4,000 frames to the sandbox runner's Chip RAM, and
+`chimera-run.exe` on Windows to the same memory. Chimera's window was not
+tried with an IPF (its test runs the `.adf` projects).
+
+**Broken on purpose.** With weak bits never drawn and no cell lengths
+handed over, `ipf:reader` failed and named the weak track, the timed track
+and the noise; with one cell in about a thousand dropped, all three failed
+(the program never started, and Prince of Persia stopped at 4 pictures).
+
+**What the Prince of Persia image is.** Written by the CAPS encoder (the
+older of the two), 155 normal tracks and 13 unformatted ones, no weak bits
+and no timed tracks. So no copy-protected game was tried: weak bits and
+timed tracks were exercised only on the tests' own images, and the timing
+values of the other protections (Speedlock, Adam Brierley's) are MAME's,
+unchecked here.
+
+Test script: 43 passed with the owner's files and a Chimera checkout; 24
+passed and 19 skipped with neither.
