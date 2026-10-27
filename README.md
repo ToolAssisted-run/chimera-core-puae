@@ -5,7 +5,7 @@ frontend for tool-assisted speedruns, for the **Commodore Amiga**, the
 **Amiga CD32** and the **Commodore CDTV**. It is
 built on [PUAE](https://github.com/libretro/libretro-uae), the libretro port
 of the Amiga emulator UAE, and produces one file, `puae.chimeraCore`, that
-goes in Chimera's `Cores` folder.
+goes in Chimera's `cores` folder.
 
 ## Status
 

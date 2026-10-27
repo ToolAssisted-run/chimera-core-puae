@@ -94,10 +94,8 @@ Copy the files there; do not link them from where you keep them. Without
 skipped.
 
 `bash tests/run-frontend.sh --chimera-root <chimera checkout>` is the window
-test: the package in Chimera's own window (under Mono, on a private Xvfb
-display). It takes the same files. Mono limits the length of a path it
-makes under the temporary folder, so give it a short one
-(`TMPDIR=$PWD/build/t`) when the default is long.
+test: the package in Chimera's own window (run headless: it needs no
+display; Chimera's `tools/ci-chimera.sh` builds it). It takes the same files.
 
 A third native build keeps upstream's own threads, which wait on the
 computer's clock, in place of the core's (`waterbox/chimera-threads.c`):
