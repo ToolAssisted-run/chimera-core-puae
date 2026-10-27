@@ -261,10 +261,10 @@ passed.
 ## 2026-10-14: the default bindings name keys Chimera has
 
 **Found.** Chimera hands a key to the bindings under one name only: the
-name DistinctKeyNameOverrides gives it ("Number1", "Enter", "Backtick",
-"KeypadAdd"), or else its DistinctKey name (Input.cs). By default it also
+name Chimera gives it ("Number1", "Enter", "Backtick",
+"KeypadAdd"), or else its own name. By default it also
 reads the left and right Shift, Ctrl and Alt as one key each, "Shift",
-"Ctrl" and "Alt" (Config.MergeLAndRModifierKeys). A binding to any other
+"Ctrl" and "Alt". A binding to any other
 name never fires, so those controls shipped unbound.
 
 **Decided.** The bindings use those names; where both keys of a modifier
