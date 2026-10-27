@@ -1,6 +1,6 @@
 #!/bin/bash
-# The package in Chimera's own window (Chimera.exe under Mono, on a private
-# Xvfb display), which the headless runner cannot show:
+# The package in Chimera's own window (run headless: it needs no display),
+# which the headless runner cannot show:
 #  - the test program (tests/make-amiga-disk.py) boots with AROS's Kickstart
 #    in the window and leaves the Chip RAM the headless runner leaves at the
 #    same frame, with the picture PUAE gives (720x287);
@@ -12,7 +12,7 @@
 #
 # Usage: tests/run-frontend.sh --chimera-root <chimera checkout> [--frames N] [--keep]
 #   --keep   leave the work folder (logs, configurations, projects) and say where it is
-# Needs: mono, Xvfb, Chimera built with its window (dotnet build), and the
+# Needs: Chimera built with its window (chimera --headless), and the
 # package installed in that checkout (waterbox/build-package.sh -r <chimera>).
 set -u
 
@@ -37,41 +37,30 @@ chimera_root="$(cd "$chimera_root" && pwd)"
 game="${AMIGA_GAME:-$here/games-local/ninja}"
 kicks="${AMIGA_KICKSTARTS:-$here/roms-local}"
 
-emu_exe="$chimera_root/build/Chimera.exe"
+chimera_exe="$chimera_root/build/meson-linux/source/ui/chimera"
 package="$chimera_root/build/Cores/puae.chimeraCore"
 runwbx="$root/build/meson-native/run-wbx"
 core="$root/build/meson-guest/core.wbx"
 runner="$chimera_root/build/meson-linux/chimera-run"
-[ -f "$emu_exe" ] || { echo "Chimera's window is not built: $emu_exe" >&2; exit 1; }
+[ -x "$chimera_exe" ] || { echo "Chimera's window is not built: $chimera_exe" >&2; exit 1; }
 [ -f "$package" ] || { echo "the package is not installed: $package (run waterbox/build-package.sh -r $chimera_root)" >&2; exit 1; }
 [ -x "$runwbx" ] && [ -f "$core" ] || { echo "the sandbox build is not there: $runwbx, $core" >&2; exit 1; }
 [ -x "$runner" ] || { echo "Chimera's headless runner is not built: $runner" >&2; exit 1; }
 
 work="$(mktemp -d)"
-xvfb_pid=""
 cleanup() {
-	[ -n "$xvfb_pid" ] && kill "$xvfb_pid" 2>/dev/null
 	if [ -n "$keep" ]; then echo "work folder kept: $work"; else rm -rf "$work"; fi
 }
 trap cleanup EXIT
 
-export LD_LIBRARY_PATH="$chimera_root/build/dll:$chimera_root/build:/usr/lib/x86_64-linux-gnu"
-export MONO_CRASH_NOFILE=1 MONO_WINFORMS_XIM_STYLE=disabled ALSOFT_DRIVERS=null
-# always a display of this test's own: nobody's desktop is drawn on
-command -v Xvfb >/dev/null || { echo "Xvfb not found (apt install xvfb)" >&2; exit 1; }
-for n in 90 91 92 93 94 95 96; do
-	if [ ! -e "/tmp/.X11-unix/X$n" ]; then
-		Xvfb ":$n" -screen 0 1024x768x24 -nolisten tcp > /dev/null 2>&1 & xvfb_pid=$!
-		export DISPLAY=":$n"; break
-	fi
-done
-[ -n "$xvfb_pid" ] || { echo "no free display number for Xvfb" >&2; exit 1; }
-sleep 1
+# run-wbx finds miniBox's host library in Chimera's build/dll
+export LD_LIBRARY_PATH="$chimera_root/build/dll${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 
-config="$work/config.ini"
-( cd "$chimera_root" && timeout 120 mono "$emu_exe" --headless "--config=$config" "--lua=$here/exit.lua" ) > "$work/bootstrap.log" 2>&1
-[ -f "$config" ] || { echo "Chimera did not write a configuration:"; tail -5 "$work/bootstrap.log"; exit 1; } >&2
-sed -i 's/"DispMethod": [0-9]/"DispMethod": 1/' "$config"
+# Chimera's window, run headless: the cores installed in the checkout, its
+# settings, cache and recovery files the run's own, and nothing carried over
+# from a Chimera installed on this machine
+export ALSOFT_DRIVERS=null CHIMERA_CORES_DIR="$chimera_root/build/Cores" CHIMERA_QT_CACHE="$work/qt-cache" CHIMERA_QT_RECOVERY="$work/qt-recovery" \
+	CHIMERA_QT_HASHES="$work/qt-file-hashes.txt" CHIMERA_QT_CHIMERA_SETTINGS="$work/no-chimera-config.ini"
 
 ok=0
 failed=0
@@ -102,13 +91,13 @@ run_frontend() {
 		echo "shot="
 		echo "domain=$domain"
 	} > "$job"
-	( cd "$chimera_root" && MINIHAWK_JOB="$job" timeout 900 mono "$emu_exe" --headless \
+	( cd "$chimera_root" && MINIHAWK_JOB="$job" timeout 900 "$chimera_exe" --headless \
 		"--config=$cfg" "--project=$work/$tag/$tag.chimeraProject" "--lua=$here/frontend-ram.lua" ) >> "$work/$tag.log" 2>&1
 	[ -f "$work/$tag.meta.txt" ] && grep -q "^status=OK" "$work/$tag.meta.txt"
 }
 value() { sed -n "s/^$2=//p" "$work/$1.meta.txt" 2>/dev/null; }
 
-python3 "$here/settings-config.py" "$config" "$work/config.base.ini" '{}'
+python3 "$here/settings-config.py" "$work/settings.base.json" '{}'
 
 # ---- the test program: needs no file of anyone's
 mkdir -p "$work/prog" "$work/probe"
@@ -122,7 +111,7 @@ make_project am $((frames + 100)) "$work/prog/prog.adf" kickstart=aros "press=P1
 "$runner" --project "$work/am/am.chimeraProject" "$package" --files "$work/am" --frames "$frames" \
 	--dump "Chip RAM=$work/engine.ram.bin" > "$work/engine.log" 2>&1
 up="$(od -An -tx1 -j $((0x7E000)) -N2 "$work/engine.ram.bin" 2> /dev/null | tr -d ' ')"
-if ! run_frontend am "$work/config.base.ini" "$frames" "Chip RAM"; then
+if ! run_frontend am "$work/settings.base.json" "$frames" "Chip RAM"; then
 	report "window:amiga" FAIL "Chimera did not finish the run: $(value am detail) $(tail -2 "$work/am.log" | tr '\n' ' ' | cut -c1-200)"
 elif [ "$(value am frames)" != "$frames" ] || [ "$(value am width)" != 720 ] || [ "$(value am height)" != 287 ]; then
 	report "window:amiga" FAIL "frames $(value am frames) of $frames, picture $(value am width)x$(value am height) and not 720x287"
@@ -132,10 +121,14 @@ else
 	report "window:amiga" FAIL "the Chip RAM differs from the headless runner's (or one of the two is missing), or P1 Up did not reach the program (JOY1DAT $up)"
 fi
 
-python3 "$here/forget-controller.py" "$work/config.base.ini" "$work/config.keys.ini" "Amiga Controls"
+# the keys the package ships are the machine's when nobody changed them (the
+# window keeps only the keys a person changed; fresh settings have none)
 mkdir -p "$work/keys"; cp "$work/am/prog.adf" "$work/keys/"; sed 's/"puae-test-[^"]*"/"puae-test-keys"/' "$work/am/am.chimeraProject" > "$work/keys/keys.chimeraProject"
-if run_frontend keys "$work/config.keys.ini" 1 ""; then
-	if python3 "$here/check-keybinds.py" "$work/config.keys.ini" "$wb/default_keybinds.json" "Amiga Controls" "P1 Fire" > "$work/keys.txt" 2>&1; then
+printf 'out=%s/keys.controls.json\nmeta=%s/keys.meta.txt\n' "$work" "$work" > "$work/job.keys.txt"
+( cd "$chimera_root" && MINIHAWK_JOB="$work/job.keys.txt" timeout 900 "$chimera_exe" --headless \
+	"--config=$work/settings.keys.json" "--project=$work/keys/keys.chimeraProject" "--lua=$here/dump-controls.lua" ) >> "$work/keys.log" 2>&1
+if [ -f "$work/keys.meta.txt" ] && grep -q "^status=OK" "$work/keys.meta.txt"; then
+	if python3 "$here/check-keybinds.py" "$work/keys.controls.json" "$wb/default_keybinds.json" "Amiga Controls" "P1 Fire" > "$work/keys.txt" 2>&1; then
 		report "window:keys" PASS "$(cat "$work/keys.txt")"
 	else
 		report "window:keys" FAIL "$(head -1 "$work/keys.txt")"
@@ -156,19 +149,19 @@ else
 	fwdir="$(mktemp -d)"
 	cp "$kick" "$fwdir/amiga-os-130.rom"
 	make_project nokick 100 "$adf" "firmware=amiga-os-130.rom=$fwdir/amiga-os-130.rom"
-	if run_frontend nokick "$work/config.base.ini" 1 ""; then
+	if run_frontend nokick "$work/settings.base.json" 1 ""; then
 		report "window:refusal" FAIL "the project opened without the Kickstart"
 	elif grep -q "amiga-os-130.rom" "$work/nokick.log"; then
 		report "window:refusal" PASS "without the Kickstart the project is not opened, and the file is named: $(grep -o "[^.]*amiga-os-130\.rom[^.]*" "$work/nokick.log" | head -1 | cut -c1-120)"
 	else
 		report "window:refusal" FAIL "refused, but the file is not named: $(tail -2 "$work/nokick.log" | tr '\n' ' ' | cut -c1-200)"
 	fi
-	python3 "$here/settings-config.py" "$config" "$work/config.fw.ini" '{}' "{\"amiga-os-130.rom\": \"$fwdir/amiga-os-130.rom\"}"
+	python3 "$here/settings-config.py" "$work/settings.fw.json" '{}' "{\"amiga-os-130.rom\": \"$fwdir/amiga-os-130.rom\"}"
 	gframes=1500
 	make_project gm $((gframes + 100)) "$adf" "firmware=amiga-os-130.rom=$fwdir/amiga-os-130.rom" "press=Key Right Amiga:1399:30"
 	"$runner" --project "$work/gm/gm.chimeraProject" "$package" --files "$work/gm" --firmware "amiga-os-130.rom=$fwdir/amiga-os-130.rom" \
 		--frames "$gframes" --dump "Chip RAM=$work/gm-engine.ram.bin" > "$work/gm-engine.log" 2>&1
-	if ! run_frontend gm "$work/config.fw.ini" "$gframes" "Chip RAM"; then
+	if ! run_frontend gm "$work/settings.fw.json" "$gframes" "Chip RAM"; then
 		report "window:game" FAIL "Chimera did not finish the run: $(value gm detail) $(tail -2 "$work/gm.log" | tr '\n' ' ' | cut -c1-200)"
 	elif [ "$(value gm frames)" = "$gframes" ] && [ -s "$work/gm-engine.ram.bin" ] && cmp -s "$work/gm-engine.ram.bin" "$work/gm.ram.bin"; then
 		report "window:game" PASS "a project of $(basename "$adf") took Kickstart 1.3 from Chimera's firmware, ran $gframes frames in the window with a key pressed, $(value gm width)x$(value gm height), and left the Chip RAM the headless runner leaves"
@@ -187,7 +180,7 @@ else
 	mkdir -p "$work/tonecd" "$work/cd"
 	python3 "$here/make-audio-cd.py" "$work/tonecd" > /dev/null
 	cp "$work/tonecd/tone.cue" "$work/tonecd/tone.bin" "$work/cd/"
-	python3 "$here/settings-config.py" "$config" "$work/config.cd.ini" '{}' \
+	python3 "$here/settings-config.py" "$work/settings.cd.json" '{}' \
 		"{\"amiga-os-310-cd32.rom\": \"$fwdir/amiga-os-310-cd32.rom\", \"amiga-os-310-cd32-ext.rom\": \"$fwdir/amiga-os-310-cd32-ext.rom\"}"
 	# the controls live on a CD32 are not those of the floppy Amiga above
 	mkdir -p "$work/cdprobe"
@@ -203,7 +196,7 @@ else
 	"$runner" --project "$work/cd/cd.chimeraProject" "$package" --files "$work/cd" \
 		--firmware "amiga-os-310-cd32.rom=$fwdir/amiga-os-310-cd32.rom" --firmware "amiga-os-310-cd32-ext.rom=$fwdir/amiga-os-310-cd32-ext.rom" \
 		--frames "$cframes" --dump "Chip RAM=$work/cd-engine.ram.bin" > "$work/cd-engine.log" 2>&1
-	if ! run_frontend cd "$work/config.cd.ini" "$cframes" "Chip RAM"; then
+	if ! run_frontend cd "$work/settings.cd.json" "$cframes" "Chip RAM"; then
 		report "window:cd32" FAIL "Chimera did not finish the run: $(value cd detail) $(tail -2 "$work/cd.log" | tr '\n' ' ' | cut -c1-200)"
 	elif [ "$(value cd frames)" = "$cframes" ] && [ -s "$work/cd-engine.ram.bin" ] && cmp -s "$work/cd-engine.ram.bin" "$work/cd.ram.bin"; then
 		report "window:cd32" PASS "a CD32 project of an audio CD (a .cue and its track) took the CD32's two ROMs from Chimera's firmware, ran $cframes frames in the window with red pressed in the CD player, $(value cd width)x$(value cd height), and left the Chip RAM the headless runner leaves"
