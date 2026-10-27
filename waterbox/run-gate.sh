@@ -151,7 +151,7 @@ m = cfg["machines"]
 ok = [x["id"] for x in m] == ["AMIGA", "CD32", "CDTV"] and all(x["input"] == m[0]["input"] for x in m) and m[0]["input"]["buttons"] == buttons and [a["name"] for a in m[0]["input"]["axes"]] == names and len(names) == axes
 sys.exit(0 if ok and len(buttons) == 119 and axes == 2 else 1)
 PY
-if [ -n "$chimera_root" ] && [ -f "$chimera_root/source/gui/Chimera.Input/KeyMouseInput/DistinctKey.cs" ]; then
+if [ -n "$chimera_root" ] && [ -f "$chimera_root/source/ui/qt/key_codes.inc" ]; then
 	check "package:key-names" "every host key the package's default bindings name is a key Chimera knows: $(python3 "$root/tests/check-key-names.py" "$chimera_root" "$here/default_keybinds.json" 2>&1)" \
 		sh -c "python3 '$root/tests/check-key-names.py' '$chimera_root' '$here/default_keybinds.json' > /dev/null 2>&1"
 else
