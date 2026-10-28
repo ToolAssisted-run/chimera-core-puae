@@ -32,6 +32,11 @@
 #include "libretro-mapper.h"   /* RETRO_DEVICE_PUAE_CD32PAD */
 
 /* ---- what went wrong, for Chimera to show -------------------------------- */
+/* A text a person reads is a key of languages/en.json, each of its
+ * arguments after a TEXT_ARG (chimera docs/translations.md). TEXT_ARG is a
+ * string of its own so the byte after it is never read as more of its hex. */
+#define TEXT_ARG "\x1f"
+
 static char g_loadError[512];
 
 /* ---- the emulator's options ------------------------------------------------
@@ -437,12 +442,12 @@ ECL_EXPORT int Init(void)
 		const long want = cdtv ? 32768 : 1024;
 		if (!g_isCd)
 		{
-			snprintf(g_loadError, sizeof g_loadError, "save data (%s) is a CD32's or CDTV's save memory, and the %s has none", g_nvram, model);
+			snprintf(g_loadError, sizeof g_loadError, "error.save_not_this_model" TEXT_ARG "%s" TEXT_ARG "%s", g_nvram, model);
 			return 0;
 		}
 		if (size != want)
 		{
-			snprintf(g_loadError, sizeof g_loadError, "%s is not the %s's save memory, which is %ld bytes (it has %ld)", g_nvram, cdtv ? "CDTV" : "CD32", want, size);
+			snprintf(g_loadError, sizeof g_loadError, "error.save_size" TEXT_ARG "%s" TEXT_ARG "%s" TEXT_ARG "%ld" TEXT_ARG "%ld", g_nvram, cdtv ? "CDTV" : "CD32", want, size);
 			return 0;
 		}
 	}
@@ -460,7 +465,7 @@ ECL_EXPORT int Init(void)
 	}
 	if (g_diskCount == 0)
 	{
-		snprintf(g_loadError, sizeof g_loadError, g_isCd ? "no disc was given" : "no disk was given");
+		snprintf(g_loadError, sizeof g_loadError, g_isCd ? "error.no_disc" : "error.no_disk");
 		return 0;
 	}
 	{
@@ -472,7 +477,7 @@ ECL_EXPORT int Init(void)
 			disc |= !strcasecmp(dot, kDisc[i]);
 		if (disc != g_isCd)
 		{
-			snprintf(g_loadError, sizeof g_loadError, disc ? "%s is a CD: set Model to CD32 or CDTV" : "%s is not a CD image, and the %s takes a CD", g_disks[0], model);
+			snprintf(g_loadError, sizeof g_loadError, disc ? "error.is_cd" TEXT_ARG "%s" : "error.not_cd" TEXT_ARG "%s" TEXT_ARG "%s", g_disks[0], model);
 			return 0;
 		}
 	}
@@ -510,7 +515,7 @@ ECL_EXPORT int Init(void)
 			FILE *f = fopen(kRoms[i].rom, "rb");
 			if (!f)
 			{
-				snprintf(g_loadError, sizeof g_loadError, "the %s's Kickstart ROM is missing: %s (or set Kickstart to 'aros')", model, kRoms[i].rom);
+				snprintf(g_loadError, sizeof g_loadError, "error.no_kickstart" TEXT_ARG "%s" TEXT_ARG "%s", model, kRoms[i].rom);
 				return 0;
 			}
 			fclose(f);
@@ -534,7 +539,7 @@ ECL_EXPORT int Init(void)
 	struct retro_game_info info = { g_disks[0], NULL, 0, NULL };
 	if (!retro_load_game(&info))
 	{
-		snprintf(g_loadError, sizeof g_loadError, "the emulator did not start with %s", g_disks[0]);
+		snprintf(g_loadError, sizeof g_loadError, "error.not_started" TEXT_ARG "%s", g_disks[0]);
 		return 0;
 	}
 	struct retro_system_av_info av;

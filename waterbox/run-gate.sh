@@ -303,7 +303,7 @@ check "amiga:ipf" "the program boots from an IPF of its disk ($(count "$work/ipf
 mkdir -p "$work/nodisk"
 printf '{"disk":[]}' > "$work/nodisk/slots"; printf '{}' > "$work/nodisk/settings"
 nat nodisk nodisk --frames 1
-check "refused:no-disk" "an Amiga with no disk is refused, and says so" grep -q "Init failed.*no disk was given" "$work/nodisk.out" "$work/nodisk.err"
+check "refused:no-disk" "an Amiga with no disk is refused, and says so" grep -q "Init failed.*error.no_disk" "$work/nodisk.out" "$work/nodisk.err"
 folder nokick '{"model":"A1200"}' "$prog"
 nat nokick nokick --frames 1
 check "refused:kickstart-missing" "an A1200 with no Kickstart ROM is refused, by the ROM's name" \
@@ -455,7 +455,7 @@ PY
 	printf '{"disc":["tone.cue"],"savedata":["short.nvr"]}' > "$work/nvbad/slots"
 	nat nvbad nvbad --frames 1
 	check "cd32:save-memory" "the CD32's save memory: started empty, the CD32 writes its header ($(od -An -tx1 -N3 "$work/nv0-out/cd32.nvr" 2> /dev/null | tr -d ' ')) and Export Save Data gives it as cd32.nvr; that file with 16 bytes of this script's at 0x100 is read in and comes back the same; a file of 512 bytes is refused" \
-		sh -c "[ \"\$(od -An -tx1 -N3 '$work/nv0-out/cd32.nvr' | tr -d ' ')\" = 0056a9 ] && cmp -s '$work/tonecd/mark.nvr' '$work/nv-out/cd32.nvr' && grep -q 'Init failed.*short.nvr is not' '$work/nvbad.out' '$work/nvbad.err'"
+		sh -c "[ \"\$(od -An -tx1 -N3 '$work/nv0-out/cd32.nvr' | tr -d ' ')\" = 0056a9 ] && cmp -s '$work/tonecd/mark.nvr' '$work/nv-out/cd32.nvr' && grep -q 'Init failed.*error.save_size.short.nvr' '$work/nvbad.out' '$work/nvbad.err'"
 
 	cue="$(ls "$cd32game"/*.cue 2> /dev/null | head -1)"
 	if [ -n "$cue" ]; then
@@ -537,7 +537,7 @@ folder nocd '{"model":"CD32","kickstart":"aros"}'
 printf '{"disc":[]}' > "$work/nocd/slots"
 nat nocd nocd --frames 1
 check "refused:cd-model" "a CD32 with no disc, or with a floppy disk where its disc goes, is refused, and says so" \
-	sh -c "grep -q 'Init failed.*no disc was given' '$work/nocd.out' '$work/nocd.err' && grep -q 'Init failed.*prog.adf is not a CD image' '$work/cdwrong.out' '$work/cdwrong.err'"
+	sh -c "grep -q 'Init failed.*error.no_disc' '$work/nocd.out' '$work/nocd.err' && grep -q 'Init failed.*error.not_cd.prog.adf' '$work/cdwrong.out' '$work/cdwrong.err'"
 
 echo
 echo "$ok passed, $failed failed, $skipped skipped"

@@ -3,7 +3,7 @@
  "slots": [
   {
    "id": "disk",
-   "title": "Disks",
+   "title": "slot.disk",
    "min": 1,
    "max": 20,
    "formats": [
@@ -13,7 +13,7 @@
     "fdi",
     "ipf"
    ],
-   "help": "The game's floppy disks: .adf files (or .adz and .dms, which are packed ones, or .fdi, or .ipf, the format that keeps a disk's copy protection). The first is in the drive when the Amiga is switched on; the others wait their turn, for the games that ask for another disk. Your files are never changed: the Amiga writes to copies of them in its memory.",
+   "help": "slot.disk.help",
    "exposedWhen": {
     "not": {
      "setting": "model",
@@ -27,7 +27,7 @@
   },
   {
    "id": "disc",
-   "title": "Disc",
+   "title": "slot.disc",
    "min": 1,
    "max": 1,
    "formats": [
@@ -42,11 +42,11 @@
      "CDTV"
     ]
    },
-   "help": "The game's CD: a .cue sheet with its track files (.bin), or an .iso of a disc that has only data. It is read as it is and never changed."
+   "help": "slot.disc.help"
   },
   {
    "id": "savedata",
-   "title": "Save data",
+   "title": "slot.savedata",
    "min": 0,
    "max": 1,
    "formats": [
@@ -60,7 +60,7 @@
      "CDTV"
     ]
    },
-   "help": "The save memory of the CD32 (1 KB, where its games keep their saves) or of the CDTV (its battery-backed memory, kept as a file of 32 KB), as Export Save Data writes it: cd32.nvr or cdtv.nvr. Without one the machine starts with its save memory empty."
+   "help": "slot.savedata.help"
   }
  ]
 }
