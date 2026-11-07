@@ -45,8 +45,11 @@ static int emulation_id;         /* what uae_thread_get_id gives the emulation *
 
 /* Switch stacks: keep the registers a function must keep (and the floating
    point control words) on this stack, leave the stack pointer in *from, and
-   go on from *to. x86-64, System V; the same in both builds. */
+   go on from *to. x86-64 (System V: rbx, rbp, r12-r15, MXCSR, x87 control
+   word) or aarch64 (AAPCS64: x19-x30, d8-d15, FPCR; x18 is the platform's and
+   is never touched); the same in both builds. */
 void chimera_co_swap(void **from, void **to);
+#if defined(__x86_64__)
 __asm__(
 	".text\n"
 	".globl chimera_co_swap\n"
@@ -74,6 +77,47 @@ __asm__(
 	"	popq %rbp\n"
 	"	ret\n"
 	".size chimera_co_swap, .-chimera_co_swap\n");
+#elif defined(__aarch64__)
+__asm__(
+	".text\n"
+	".globl chimera_co_swap\n"
+	".type chimera_co_swap,%function\n"
+	"chimera_co_swap:\n"
+	"	sub sp, sp, #176\n"
+	"	stp x19, x20, [sp, #0]\n"
+	"	stp x21, x22, [sp, #16]\n"
+	"	stp x23, x24, [sp, #32]\n"
+	"	stp x25, x26, [sp, #48]\n"
+	"	stp x27, x28, [sp, #64]\n"
+	"	stp x29, x30, [sp, #80]\n"
+	"	stp d8, d9, [sp, #96]\n"
+	"	stp d10, d11, [sp, #112]\n"
+	"	stp d12, d13, [sp, #128]\n"
+	"	stp d14, d15, [sp, #144]\n"
+	"	mrs x9, fpcr\n"
+	"	str x9, [sp, #160]\n"
+	"	mov x9, sp\n"
+	"	str x9, [x0]\n"
+	"	ldr x9, [x1]\n"
+	"	mov sp, x9\n"
+	"	ldr x9, [sp, #160]\n"
+	"	msr fpcr, x9\n"
+	"	ldp x19, x20, [sp, #0]\n"
+	"	ldp x21, x22, [sp, #16]\n"
+	"	ldp x23, x24, [sp, #32]\n"
+	"	ldp x25, x26, [sp, #48]\n"
+	"	ldp x27, x28, [sp, #64]\n"
+	"	ldp x29, x30, [sp, #80]\n"
+	"	ldp d8, d9, [sp, #96]\n"
+	"	ldp d10, d11, [sp, #112]\n"
+	"	ldp d12, d13, [sp, #128]\n"
+	"	ldp d14, d15, [sp, #144]\n"
+	"	add sp, sp, #176\n"
+	"	ret\n"
+	".size chimera_co_swap, .-chimera_co_swap\n");
+#else
+#error "the thread switch is written for x86-64 and aarch64"
+#endif
 
 static void yield_to_emulation(void)
 {
@@ -262,12 +306,21 @@ int uae_start_thread(const char *name, void (*f)(void *), void *arg, uae_thread_
 	/* What chimera_co_swap pops: the control words, six registers, and the
 	   return into thread_entry, which then finds the stack as a call left
 	   it. */
+#if defined(__x86_64__)
 	uint64_t *top = (uint64_t *)((char *)stack + STACK_SIZE);
 	*--top = 0;
 	*--top = (uint64_t)(uintptr_t)thread_entry;
 	for (int i = 0; i < 6; i++)
 		*--top = 0;
 	*--top = 0x1f80 | ((uint64_t)0x037f << 32);
+#else
+	/* aarch64: the 176-byte frame chimera_co_swap restores, all zero (FPCR 0:
+	   round to nearest) but x30, which "returns" into thread_entry */
+	uint64_t *top = (uint64_t *)((char *)stack + STACK_SIZE) - 22;
+	for (int i = 0; i < 22; i++)
+		top[i] = 0;
+	top[11] = (uint64_t)(uintptr_t)thread_entry;
+#endif
 	t->sp = top;
 
 	threads[slot] = t;
