@@ -31,6 +31,12 @@
 #include "disk.h"
 #include "libretro-mapper.h"   /* RETRO_DEVICE_PUAE_CD32PAD */
 
+/* this core's windows in Chimera's Emulator menu: miniBox's ready-made Export
+ * Save Data, built on its exports (Chimera has no tool of its own for a core,
+ * Chimera issue 610) */
+#define WBX_WINDOWS_IMPLEMENTATION
+#include <waterbox_windows.h>
+
 /* ---- what went wrong, for Chimera to show -------------------------------- */
 /* A text a person reads is a key of languages/en.json, each of its
  * arguments after a TEXT_ARG (chimera docs/translations.md). TEXT_ARG is a
